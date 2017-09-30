@@ -501,84 +501,18 @@ class config_management:
 		else:
 			print("%s not in config!" % function)
 	def set(self, args):
+		maps = {
+		"device": config_device,
+		"credential": config_credential,
+		"script": script_class
+		}
 		function = args[2]
-		if function == "device":
-			self.set_device(args)
-		elif function == "credential":
-			self.set_credential(args)
-		elif function == "script":
-			self.set_script(args)
-	def set_device(self, args):
-		newdevice = config_device(args)
-		self.running["devices"].update(newdevice.config)
-		self.save()
-	def set_credential(self, args):
-		newcredential = config_credential(args)
-		self.running["credentials"].update(newcredential.config)
-		self.save()
-	def set_script(self, args):
-		def _length_check(args, length):
-			if len(args) < length:
-				print("Command Incomplete!")
-			else:
-				return True
-		def _make_step_num(stepnum, context):
-			if "steps" not in list(context):
-				context.update({"steps": {}})
-			context["steps"].update({stepnum: {}})
-		def _create_step(args, context):
-			stepnum = args[5]
-			action = args[6]
-			if self._check_step_number(stepnum):
-				if action == "terminate":
-					if _length_check(args, 7):
-						_make_step_num(stepnum, context)
-						context["steps"].update({stepnum: {"terminate": None}})
-				elif action == "dump-input":
-					if _length_check(args, 7):
-						_make_step_num(stepnum, context)
-						context["steps"].update({stepnum: {"dump-input": None}})
-				elif action == "send":
-					if _length_check(args, 8):
-						_make_step_num(stepnum, context)
-						context["steps"].update({stepnum: {"send": args[7]}})
-				elif action == "run-script":
-					if _length_check(args, 8):
-						_make_step_num(stepnum, context)
-						context["steps"].update({stepnum: {"run-script": args[7]}})
-				elif action == "set-output":
-					if _length_check(args, 8):
-						_make_step_num(stepnum, context)
-						context["steps"].update({stepnum: {"set-output": args[7]}})
-				elif action == "if-match":
-					if _length_check(args, 9):
-						_make_step_num(stepnum, context)
-						context["steps"].update({stepnum: {
-							"if-match": {
-								"regex": args[7],
-								"criterion": args[8]}}})
-				elif action == "for-match":
-					if _length_check(args, 8):
-						_make_step_num(stepnum, context)
-						context["steps"].update({stepnum: {
-							"for-match": {
-								"regex": args[7]}}})
-				else:
-					print("Function (%s) unknown!" % action)
-			else:
-				print("Invalid step number (%s)" % stepnum)
-		#print(args)
-		if _length_check(args, 7):
-			scriptname = args[3]
-			function = args[4]
-			if "scripts" not in list(self.running):
-				self.running.update({"scripts": {}})
-			if scriptname not in list(self.running["scripts"]):
-				self.running["scripts"].update({scriptname: {}})
-			if function == "step":
-				context = self.running["scripts"][scriptname]
-				_create_step(args, context)
+		if function in maps:
+			newobj = maps[function](args)
+			self.running[function+"s"].update(newobj.config)
 			self.save()
+		else:
+			print("Unrecognized function (%s)" % function)
 
 
 class config_common:
@@ -598,15 +532,48 @@ class config_common:
 		self.config = None
 		self.attrib_list = []
 		self.attrib_dict = {}
+		self._input_profile = {}
 		self._attrib_order = None
+	def _obj_name_chk(self, objname):
+		regex = "[A-Za-z0-9\_\-]+"
+		search = re.findall(regex, objname)
+		if len(search) != 1 or search[0] != objname:
+			print("Bad Object Name: %s" % objname)
+			return False
+		else:
+			return True
+	def _input_check(self, inputdata):
+		result = True
+		profile = self._input_profile
+		for check in profile:
+			if type(profile[check]) == type(""):
+				if inputdata[check] != profile[check]:
+					result = False
+					print("Bad Argument: %s" % inputdata[check])
+			elif type(profile[check]) == type([]):
+				if inputdata[check] not in profile[check]:
+					result = False
+					print("Bad Argument: %s" % inputdata[check])
+			elif type(profile[check]) == type(None):
+				if len(inputdata) < check:
+					result = False
+					print("Incomplete Command!")
+			else:  # It is a check method
+				if not profile[check](inputdata[check]):
+					result = False
+		return result
 	def _sort_input(self, inputdata):
-		if type(inputdata) == type([]):  # If input is a list
-			# Then we are recieving a CLI command as args
-			self._parse_command(inputdata)
-		elif type(inputdata) == type({}):  # If input is a dict
-			# Then we are recieving config from the configfile
-			self._parse_config(inputdata)
-		self._fill_in()
+		if self._input_check(inputdata):
+			if type(inputdata) == type([]):  # If input is a list
+				# Then we are recieving a CLI command as args
+				self._parse_command(inputdata)
+			elif type(inputdata) == type({}):  # If input is a dict
+				# Then we are recieving config from the configfile
+				self._parse_config(inputdata)
+			self._fill_in()
+		else:
+			print("Quitting")
+			quit()
 	def _parse_command(self, inputdata):
 		self.name = inputdata[3]
 		self._get_attribs(inputdata[4:], self._attribs)
@@ -669,6 +636,11 @@ class config_credential(config_common):
 		self.username = self.attrib()
 		self.cred_method = self.attrib()
 		self.cred_value = self.attrib()
+		self._input_profile = {
+			3: self._obj_name_chk,
+			4: "username",
+			6: ["password", "private-key"],
+			8: None}
 		# self._attribs = {
 		#	("either","or","in-order"): (key_here, val_here), 
 		#	"simple": val_here}
@@ -695,6 +667,12 @@ class config_device(config_common):
 		self.host = self.attrib()
 		self.credentialname = self.attrib()
 		self.credential = None
+		self._input_profile = {
+			3: self._obj_name_chk,
+			4: "credential",
+			5: self._obj_name_chk,
+			6: "host",
+			8: None}
 		self._attribs = {
 			"credential": self.credentialname, "host": self.host}
 		self._attrib_order = ["credential", "host"]
@@ -715,9 +693,9 @@ class config_device(config_common):
 #print(c.attrib_list, "\n\n", c.attrib_dict)
 
 
- # Class for interpreting and executing configured scripts
+# Class for interpreting and executing configured scripts
 class script_class(config_common):
-	def __init__(self, inputdata, sock, globalinput=None):
+	def __init__(self, inputdata, sock=None, globalinput=None):
 		self._commons()  # Build common vars
 		############
 		self.function = "script"
@@ -934,7 +912,14 @@ class script_class(config_common):
 		for name in inputdata:
 			self.name = name
 		self.config = inputdata
-		#self._get_attribs(inputdata[self.name], self._attribs)
+	def _parse_command(self, inputdata):
+		name = inputdata[3]
+		newstep = self._interpret_cmd(inputdata)
+		if name not in config.running["scripts"]:
+			self._parse_config({name: {"steps": newstep}})
+		else:
+			self._parse_config({name: config.running["scripts"][name]})
+			self.config[self.name]["steps"].update(newstep)
 	def _fill_in(self):
 		self.steps = self.steps_class(self.config[self.name]["steps"], self.globalinput)  # Instantiate steps
 		self.set_cmd_list = self._make_cmds()
@@ -945,6 +930,41 @@ class script_class(config_common):
 			stepcmdlist += step.cmd_list
 			result.append(stepcmdlist)
 		return result
+	def _interpret_cmd(self, inputdata):
+		def _length_check(args, length):
+			if len(args) < length:
+				print("Command Incomplete!")
+				quit()
+			else:
+				return True
+		def _no_args(inputdata):
+			return {inputdata[5]: {inputdata[6]: None}}
+		def _simple(inputdata):
+			if _length_check(inputdata, 8):
+				return {inputdata[5]: {inputdata[6]: inputdata[7]}}
+		def _for_match(inputdata):
+			if _length_check(inputdata, 8):
+				return {inputdata[5]: {inputdata[6]: {"regex": inputdata[7]}}}
+		def _if_match(inputdata):
+			if _length_check(inputdata, 9):
+				return {inputdata[5]: {inputdata[6]: {
+					"regex": inputdata[7],
+					"criterion": inputdata[8]}}}
+		if _length_check(inputdata, 7):
+			action = inputdata[6]
+			maps = {
+				"dump-input": _no_args,
+				"terminate": _no_args,
+				"run-script": _simple,
+				"send": _simple,
+				"set-output": _simple,
+				"for-match": _for_match,
+				"if-match": _if_match,
+			}
+			if action in maps:
+				return maps[action](inputdata)
+			else:
+				print("Unknown action (%s)!" % action)
 	######## Script execution methods ########
 	def __output(self, outputdata):
 		self.steps.store_output(outputdata)  # Write to child steps
@@ -1020,6 +1040,15 @@ class script_class(config_common):
 				ui.write_log("Terminate flag set. Terminating script")
 				return self.lastoutput
 		return self.lastoutput  # Return the socket after complete
+
+
+
+#c = {'SHORT': {u'steps': {u'1': {u'send': u'show ver'}, u'1.1': {u'dump-input': None}}}}
+#
+#a = script_class(b, None)
+#b = ['conman', 'set', 'script', 'SHORT', 'step', '1', u'send', u'"show ver"']
+
+
 
 
 
@@ -1130,7 +1159,6 @@ def interpreter():
 		print("testing")
 	if arguments == "next":
 		print("- Create working recursive script")
-		print("- Make script_class able to accept cli arguments (like other config objects)? Or handle in config_management?")
 		print("- script_class should be able to skip steps (after a loop) all together (not nullify)")
 		print("- Build private-key config objects (or string processing in scripts)")
 		print("- Integrate Munge engine into system")
@@ -1300,7 +1328,7 @@ if __name__ == "__main__":
 		#
 		#a = config["steps"]
 		#b = steps_class(a)
-
+		#
 		#x = ['1', '1.1', '1.1.1', '1.2', '1.2.20', '2.1', '2.3', '10.0', '10.0.1.1', '10.1', '100']
 		#x = ['100', "15.1", '15.100', '15', '1000', '1.5.43.23', '1.5.674.234', '1.5.7', '15.1.15', '1', '1.5.674.100', '1.5.674.1', '1.5.674', '1.5.674.1.1.1.1.1']
 		#
