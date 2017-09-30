@@ -693,12 +693,19 @@ class config_device(config_common):
 		############
 		self.function = "device"
 		self.host = self.attrib()
-		self.credential = self.attrib()
+		self.credentialname = self.attrib()
+		self.credential = None
 		self._attribs = {
-			"credential": self.credential, "host": self.host}
+			"credential": self.credentialname, "host": self.host}
 		self._attrib_order = ["credential", "host"]
 		############
 		self._sort_input(inputdata)
+		############
+		self._get_cred()
+	def _get_cred(self):
+		cred = str(self.credentialname)
+		if cred in config.running["credentials"]:
+			self.credential = config_credential({cred: config.running["credentials"][cred]})
 
 #a = ['conman', 'set', 'device', 'SOMEDEVICE', 'host', '10.0.0.1', 'asdf', 'credential', 'MY_CREDS', "otheratt", "otherval", "othersomething2"]
 #a = {'SOMEDEVICE': {'credential': 'MY_CREDS', 'host': '10.0.0.1'}}
@@ -974,6 +981,15 @@ class script_class(config_common):
 			newscript = script_class({step.str: {"steps": childinst}}, self.sock, globalinput=match)
 			newscript.run()
 		self.steps.nullify() # Nullify offspring to prevent linear run
+	def _run_script(self, step):
+		script = step.instructions["run-script"]
+		if script in config.running["scripts"]:
+			newscript = script_class({script: config.running["scripts"][script]}, self.sock, globalinput=step.input)
+			output = newscript.run()
+			self.__output(output)
+		else:
+			ui.write_log("Script %s not found. Skipping" % script)
+			self.steps.nullify()
 	def run(self):
 		lastoutput = None
 		funcmap = {  # Map config function names to actual methods
@@ -981,7 +997,8 @@ class script_class(config_common):
 			"dump-input": self._dump_input,
 			"if-match": self._if_match,
 			"terminate": self._terminate,
-			"for-match": self._for_match
+			"for-match": self._for_match,
+			"run-script": self._run_script
 		}
 		for step in self.steps:  # Iter through step objects in order
 			if not self.terminate:
@@ -1001,8 +1018,8 @@ class script_class(config_common):
 				ui.write_log("\n\n\n")
 			else:
 				ui.write_log("Terminate flag set. Terminating script")
-				return (self.sock, self.lastoutput)
-		return (self.sock, self.lastoutput)  # Return the socket after complete
+				return self.lastoutput
+		return self.lastoutput  # Return the socket after complete
 
 
 
@@ -1011,9 +1028,17 @@ class search_class:
 	def __init__(self, regexdata, inputdata):
 		self.regexdata = regexdata
 		self.inputdata = inputdata
-		self.matchlist = re.findall(regexdata, inputdata, re.MULTILINE)
+		self.matchlist = []
+		self._search()
 		self._search_partial()
 		self._search_complete()
+	def _search(self):
+		if not self.inputdata:
+			return None
+		elif len(self.inputdata) == 0:
+			return None
+		else:
+			self.matchlist = re.findall(self.regexdata, self.inputdata, re.MULTILINE)
 	def _search_partial(self):
 		if len(self.matchlist) > 0:
 			self.partial = True
@@ -1041,13 +1066,13 @@ class search_class:
 
 
 class operations_class:  # Container class
-	def connect(self, host, username, password):
+	def connect(self, device):
 		#return None
 		host = {
 			"device_type": "cisco_ios",
-			"host": host,
-			"username": username,
-			"password": password
+			"host": str(device.host),
+			"username": str(device.credential.username),
+			"password": str(device.credential.cred_value)
 		}
 		result = netmiko.ConnectHandler(**host)
 		return result
@@ -1064,16 +1089,12 @@ class operations_class:  # Container class
 			print("Device (%s) not in configuration" % devicename)
 			return None
 		device = config_device({devicename: config.running["devices"][devicename]})
-		if str(device.credential) not in list(config.running["credentials"]):
-			print("Credential (%s) not in configuration" % device.credential)
-			return None
-		credential = config_credential({str(device.credential): config.running["credentials"][str(device.credential)]})
-		host = str(device.host)
-		username = str(credential.username)
-		password = str(credential.cred_value)
-		sock = self.connect(host, username, password)
-		script = script_class({scriptname: config.running["scripts"][scriptname]}, sock)
-		script.run()
+		if device.credential:
+			sock = self.connect(device)
+			script = script_class({scriptname: config.running["scripts"][scriptname]}, sock)
+			script.run()
+		else:
+			print("Invalid credentials configured for device!")
 
 
 
@@ -1108,18 +1129,20 @@ def interpreter():
 	if arguments == "test":
 		print("testing")
 	if arguments == "next":
-		print("1: Make script_class able to accept cli arguments (like other config objects)? Or handle in config_management?")
-		print("2: Build operational (run) handling so scripts can be run")
-		print("3: Build private-key config objects")
-		print("4: Integrate Munge engine into system")
-		print("5: Clean up text output handling (remove all prints)")
-		print("6: Build input checking into config objects?")
-		print("7: Allow objects to process commands and send errors to console")
-		print("8: Create for-match method to create subscripts and run them")
-		print("9: More script functions: elif-match, else, set-variable, enter-config, exit-config")
-		print("9: Build: credential-groups, device-groups")
-		print("9: Build: Script output class for testing")
-		print("9: Create config for device OS types")
+		print("- Create working recursive script")
+		print("- Make script_class able to accept cli arguments (like other config objects)? Or handle in config_management?")
+		print("- script_class should be able to skip steps (after a loop) all together (not nullify)")
+		print("- Build private-key config objects (or string processing in scripts)")
+		print("- Integrate Munge engine into system")
+		print("- Clean up text output handling (remove all prints)")
+		print("- Build input checking into config objects?")
+		print("- Allow objects to process commands and send errors to console")
+		print("- Create for-match method to create subscripts and run them")
+		print("- More script functions: elif-match, else, set-variable, enter-config, exit-config")
+		print("- Build: credential-groups, device-groups")
+		print("- Build: Script output class for testing")
+		print("- Create config for device OS types")
+		print("- Create default credential setting")
 	##### HIDDEN #####
 	elif arguments[:6] == "hidden" and len(sys.argv) > 3:
 		config.hidden(sys.argv)
