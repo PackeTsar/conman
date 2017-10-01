@@ -17,70 +17,6 @@ import netmiko
 version = "v0.0.1"
 
 
-# conman set private-key DEVEL_KEY ^
-# -----BEGIN RSA PRIVATE KEY-----
-# asdfasdfasdfasdf
-# asdfasdfasdfasdf
-# asdfasdfasdfasdf
-# asdfasdfasdfasdf
-# asdfasdfasdfasdf
-# -----END RSA PRIVATE KEY-----
-# ^
-
-# conman set credential MY_CREDS username "admin"
-# conman set credential MY_CREDS password "password123"
-
-# conman set credential DEVEL_CRED username "ec2-user"
-# conman set credential DEVEL_CRED private-key DEVEL_KEY
-
-# conman set device MY_SWITCH host 10.0.0.1 credential MY_CREDS
-# conman set device YOUR_SWITCH host yourswitch.kernshosting.com credential MY_CREDS
-
-# conman set device-group SWITCHES member MY_SWITCH
-# conman set device-group SWITCHES member YOUR_SWITCH
-
-# conman set script REBOOT_SWITCH step 1 send "write"
-# conman set script REBOOT_SWITCH step 1.1 if-match "[OK]" partial
-# conman set script REBOOT_SWITCH step 1.1.1 send "reload"
-# conman set script REBOOT_SWITCH step 1.2 else
-# conman set script REBOOT_SWITCH step 1.2.1 terminate
-# conman set script REBOOT_SWITCH step 2 send "reload"
-# conman set script REBOOT_SWITCH step 2.1 if-match "[confirm]" partial
-# conman set script REBOOT_SWITCH step 2.1.1 send "\n"
-# conman set script REBOOT_SWITCH step 2.2 else
-# conman set script REBOOT_SWITCH step 2.2.1 terminate
-
-# conman set script SOMETHING step 1 send "show ip interface br"
-# conman set script SOMETHING step 1.1 if-match "Gigibit" partial
-# conman set script SOMETHING step 1.1.1 send "write mem"
-# conman set script SOMETHING step 1.1.2 send "show version"
-# conman set script SOMETHING step 1.1.1.1 if-match "15.0.1"
-# conman set script SOMETHING step 1.1.1.1.1 send "show inventory"
-
-# conman set script CHANGE_VLAN_10_TO_20 credential MY_CREDS
-# conman set script CHANGE_VLAN_10_TO_20 step 1 send "show run | in interface|switchport access vlan 30"
-# conman set script CHANGE_VLAN_10_TO_20 step 1.1 for-match "FastEthernet1/0/..\n switchport access vlan 30" partial
-# conman set script CHANGE_VLAN_10_TO_20 step 1.1.1 send munge SCRUB_CONFIG
-# conman set script CHANGE_VLAN_10_TO_20 step 2 terminate
-
-# conman set munge SCRUB_CONFIG 1.0 match any
-# conman set munge SCRUB_CONFIG 1.1 set-variable DATA from-match "FastEthernet1/0/..\n switchport access vlan "
-# conman set munge SCRUB_CONFIG 1.2 set-variable IFACE from-string "interface "
-# conman set munge SCRUB_CONFIG 1.3 set-variable VLAN from-string " 40"
-# conman set munge SCRUB_CONFIG 1.4 assemble IFACE DATA VLAN
-
-# conman set script REBOOT_SWITCH step 1 send "write"
-# conman set script REBOOT_SWITCH step 1.1 if-match "[OK]" partial
-# conman set script REBOOT_SWITCH step 1.1.1 send "reload"
-# conman set script REBOOT_SWITCH step 1.2 else
-# conman set script REBOOT_SWITCH step 1.2.1 terminate
-# conman set script REBOOT_SWITCH step 2 send "reload"
-# conman set script REBOOT_SWITCH step 2.1 if-match "[confirm]" partial
-# conman set script REBOOT_SWITCH step 2.1.1 send "\n"
-# conman set script REBOOT_SWITCH step 2.2 else
-# conman set script REBOOT_SWITCH step 2.2.1 terminate
-
-
 class test_sock:
 	def __init__(self):
 		self.connected = True
@@ -91,7 +27,6 @@ class test_sock:
 		return result[0:len(result)-1]
 	def disconnect(self):
 		self.connected = True
-	
 
 
 class cli:
@@ -102,12 +37,6 @@ class cli:
 		print(data)
 	def console(self, data):
 		print(data)
-
-
-
-
-
-
 
 
 ##### Installer class: A simple holder class which contains all of the    #####
@@ -164,7 +93,7 @@ _conman_complete()
         COMPREPLY=( $(compgen -W "config run" -- $cur) )
         ;;
       "set")
-        COMPREPLY=( $(compgen -W "credential device script" -- $cur) )
+        COMPREPLY=( $(compgen -W "credential device script default" -- $cur) )
         ;;
       "run")
         COMPREPLY=( $(compgen -W "script" -- $cur) )
@@ -182,6 +111,11 @@ _conman_complete()
       run)
         if [ "$prev2" == "show" ]; then
           COMPREPLY=( $(compgen -W "raw -" -- $cur) )
+        fi
+        ;;
+      default)
+        if [ "$prev2" == "set" ]; then
+          COMPREPLY=( $(compgen -W "credential device-type" -- $cur) )
         fi
         ;;
       credential)
@@ -216,7 +150,7 @@ _conman_complete()
         ;;
       show)
         if [ "$prev2" == "hidden" ]; then
-          COMPREPLY=( $(compgen -W "credentials devices scripts script-steps -" -- $cur) )
+          COMPREPLY=( $(compgen -W "credentials devices scripts script-steps supported-devices -" -- $cur) )
         fi
         ;;
       *)
@@ -231,7 +165,19 @@ _conman_complete()
     fi
     if [ "$prev2" == "device" ]; then
       if [ "$prev3" == "set" ]; then
-        COMPREPLY=( $(compgen -W "credential" -- $cur) )
+        COMPREPLY=( $(compgen -W "host" -- $cur) )
+      fi
+    fi
+    if [ "$prev2" == "default" ]; then
+      if [ "$prev3" == "set" ]; then
+        if [ "$prev" == "credential" ]; then
+          local inserts=$(for k in `conman hidden show credentials`; do echo $k ; done)
+          COMPREPLY=( $(compgen -W "${inserts} <credential-name> -" -- $cur) )
+        fi
+        if [ "$prev" == "device-type" ]; then
+          local inserts=$(for k in `conman hidden show supported-devices`; do echo $k ; done)
+          COMPREPLY=( $(compgen -W "${inserts}  -" -- $cur) )
+        fi
       fi
     fi
     if [ "$prev2" == "script" ]; then
@@ -259,8 +205,7 @@ _conman_complete()
     prev4=${COMP_WORDS[COMP_CWORD-4]}
     if [ "$prev4" == "set" ]; then
       if [ "$prev3" == "device" ]; then
-        local inserts=$(for k in `conman hidden show credentials`; do echo $k ; done)
-        COMPREPLY=( $(compgen -W "${inserts} <credential-object-name> -" -- $cur) )
+        COMPREPLY=( $(compgen -W "<hostname-or-IP-address> -" -- $cur) )
       fi
     fi
     if [ "$prev4" == "set" ]; then
@@ -285,7 +230,7 @@ _conman_complete()
     prev5=${COMP_WORDS[COMP_CWORD-5]}
     if [ "$prev5" == "set" ]; then
       if [ "$prev4" == "device" ]; then
-        COMPREPLY=( $(compgen -W "host" -- $cur) )
+        COMPREPLY=( $(compgen -W "credential type <enter>" -- $cur) )
       fi
     fi
     if [ "$prev5" == "set" ]; then
@@ -303,8 +248,13 @@ _conman_complete()
     prev6=${COMP_WORDS[COMP_CWORD-6]}
     if [ "$prev6" == "set" ]; then
       if [ "$prev5" == "device" ]; then
-        if [ "$prev" == "host" ]; then
-          COMPREPLY=( $(compgen -W "<hostname-or-IP-address> -" -- $cur) )
+        if [ "$prev" == "credential" ]; then
+          local inserts=$(for k in `conman hidden show credentials`; do echo $k ; done)
+          COMPREPLY=( $(compgen -W "${inserts} <credential-object-name> -" -- $cur) )
+        fi
+        if [ "$prev" == "type" ]; then
+          local inserts=$(for k in `conman hidden show supported-devices`; do echo $k ; done)
+          COMPREPLY=( $(compgen -W "${inserts} <device-type> -" -- $cur) )
         fi
       fi
     fi
@@ -348,6 +298,30 @@ _conman_complete()
           COMPREPLY=( $(compgen -W "partial complete -" -- $cur) )
         fi
       fi
+      if [ "$prev6" == "device" ]; then
+        if [ "$prev2" == "credential" ]; then
+          COMPREPLY=( $(compgen -W "type <enter>" -- $cur) )
+        fi
+        if [ "$prev2" == "type" ]; then
+          COMPREPLY=( $(compgen -W "credential <enter>" -- $cur) )
+        fi
+      fi
+    fi
+  elif [ $COMP_CWORD -eq 9 ]; then
+    prev2=${COMP_WORDS[COMP_CWORD-2]}
+    prev7=${COMP_WORDS[COMP_CWORD-7]}
+    prev8=${COMP_WORDS[COMP_CWORD-8]}
+    if [ "$prev8" == "set" ]; then
+      if [ "$prev7" == "device" ]; then
+        if [ "$prev" == "credential" ]; then
+          local inserts=$(for k in `conman hidden show credentials`; do echo $k ; done)
+          COMPREPLY=( $(compgen -W "${inserts} <credential-object-name> -" -- $cur) )
+        fi
+        if [ "$prev" == "type" ]; then
+          local inserts=$(for k in `conman hidden show supported-devices`; do echo $k ; done)
+          COMPREPLY=( $(compgen -W "${inserts} <device-type> -" -- $cur) )
+        fi
+      fi
     fi
   fi
   return 0
@@ -369,6 +343,11 @@ class config_management:
 	def __init__(self):
 		self.configfile = self._get_config_file()
 		self._publish()
+		self._get_supported_devices()
+	def _get_supported_devices(self):
+		from netmiko.ssh_dispatcher import CLASS_MAPPER_BASE as supported_devices
+		self.supported_devices = list(supported_devices)
+		self.supported_devices.sort()
 	def _get_config_file(self):
 		configfilename = "conman.cfg"
 		pathlist = ["/etc/conman", os.getcwd()]
@@ -435,20 +414,29 @@ class config_management:
 			curscript = ""
 			for cmd in current.set_cmd_list:
 				curscript += " ".join(cmd)+"\n"
-			scripttext += curscript+"!\n"
-		scripttext += "!\n########################\n"
+			scripttext += curscript
+		scripttext += "!\n########################\n!\n"
+		####################
+		defaulttext = ""
+		current = config_default({"defaults": self.running["defaults"]})
+		defaulttext += current.set_cmd+"\n"
+		defaulttext += "!\n########################\n"
 		####################
 		configtext += credentialtext
 		configtext += devicetext
 		configtext += scripttext
+		configtext += defaulttext
 		print(configtext)
 	def hidden(self, args):
 		item = args[3]
 		simple = ["credentials", "devices", "scripts"]
 		if item in simple:
 			self.hidden_show_simple(item)
-		if item == "script-steps":
+		elif item == "script-steps":
 			self.hidden_show_script_steps(args)
+		elif item == "supported-devices":
+			for each in self.supported_devices:
+				print(each)
 	def hidden_show_simple(self, item):
 		if item in list(self.running):
 			for each in self.running[item]:
@@ -504,11 +492,14 @@ class config_management:
 		maps = {
 		"device": config_device,
 		"credential": config_credential,
-		"script": script_class
+		"script": script_class,
+		"default": config_default
 		}
 		function = args[2]
 		if function in maps:
 			newobj = maps[function](args)
+			if function+"s" not in list(self.running):
+				self.running.update({function+"s": {}})
 			self.running[function+"s"].update(newobj.config)
 			self.save()
 		else:
@@ -534,6 +525,7 @@ class config_common:
 		self.attrib_dict = {}
 		self._input_profile = {}
 		self._attrib_order = None
+		self._cmd_offset = 0
 	def _obj_name_chk(self, objname):
 		regex = "[A-Za-z0-9\_\-]+"
 		search = re.findall(regex, objname)
@@ -542,41 +534,49 @@ class config_common:
 			return False
 		else:
 			return True
-	def _input_check(self, inputdata):
+	def _input_check(self, inputdata, profile=None):
 		result = True
-		profile = self._input_profile
-		for check in profile:
-			if type(profile[check]) == type(""):
-				if inputdata[check] != profile[check]:
-					result = False
-					print("Bad Argument: %s" % inputdata[check])
-			elif type(profile[check]) == type([]):
-				if inputdata[check] not in profile[check]:
-					result = False
-					print("Bad Argument: %s" % inputdata[check])
-			elif type(profile[check]) == type(None):
-				if len(inputdata) < check:
-					result = False
-					print("Incomplete Command!")
-			else:  # It is a check method
-				if not profile[check](inputdata[check]):
-					result = False
+		if not profile:
+			profile = self._input_profile
+		prolist = list(profile)
+		prolist.sort()
+		prolist.reverse()
+		for check in prolist:
+			try:
+				if type(profile[check]) == type(""):
+					if inputdata[check] != profile[check]:
+						result = False
+						print("Bad Argument: %s" % inputdata[check])
+				elif type(profile[check]) == type([]):
+					if inputdata[check] not in profile[check]:
+						result = False
+						print("Bad Argument: %s" % inputdata[check])
+				elif type(profile[check]) == type(None):
+					if len(inputdata) < check:
+						result = False
+						print("Incomplete Command!")
+						break
+				else:  # It is a check method
+					if not profile[check](inputdata[check]):
+						result = False
+			except IndexError:
+				pass
 		return result
 	def _sort_input(self, inputdata):
-		if self._input_check(inputdata):
 			if type(inputdata) == type([]):  # If input is a list
 				# Then we are recieving a CLI command as args
-				self._parse_command(inputdata)
+				if self._input_check(inputdata):
+					self._parse_command(inputdata)
+				else:
+					print("Quitting")
+					quit()
 			elif type(inputdata) == type({}):  # If input is a dict
 				# Then we are recieving config from the configfile
 				self._parse_config(inputdata)
 			self._fill_in()
-		else:
-			print("Quitting")
-			quit()
 	def _parse_command(self, inputdata):
-		self.name = inputdata[3]
-		self._get_attribs(inputdata[4:], self._attribs)
+		self.name = inputdata[3+self._cmd_offset]
+		self._get_attribs(inputdata[4+self._cmd_offset:], self._attribs)
 	def _parse_config(self, inputdata):
 		for name in inputdata:
 			self.name = name
@@ -628,6 +628,47 @@ class config_common:
 		self.attrib_dict_to_list()
 
 
+
+class config_default(config_common):
+	def __init__(self, inputdata):
+		self._commons()  # Build common vars
+		############
+		self._cmd_offset = -1
+		self.function = "default"
+		self.credential_name = self.attrib()
+		self.device_type = self.attrib()
+		self.credential = None
+		self._input_profile = {
+			3: ["credential", "device-type"],
+			4: self._obj_name_chk}
+		self._attribs = {
+			"credential": self.credential_name,
+			"device-type": self.device_type}
+		############
+		self._sort_input(inputdata)
+		self.config = self.attrib_dict  # Override default named config
+		self._populate()
+	def _fill_in(self):
+		self.set_cmd_list = [
+			'conman', 'set', self.function, "credential", str(self.credential_name), "\n"
+			'conman', 'set', self.function, "device-type", str(self.device_type)]
+		self.set_cmd = " ".join(self.set_cmd_list)
+		self.config = {self.name:{}}
+		self.config[self.name].update(self.attrib_dict)
+	def _populate(self):
+		if str(self.credential_name) in list(config.running["credentials"]):
+			self.credential = config_credential({str(self.credential_name): config.running["credentials"][str(self.credential_name)]})
+			self.username = self.credential.username
+			self.cred_method = self.credential.cred_method
+			self.cred_value = self.credential.cred_value
+
+#a = {"defaults": {"credential": "ADMIN", "device-type": "cisco-ios"}}
+#c = config_default(a)
+
+
+
+
+
 class config_credential(config_common):
 	def __init__(self, inputdata):
 		self._commons()  # Build common vars
@@ -667,23 +708,34 @@ class config_device(config_common):
 		self.host = self.attrib()
 		self.credentialname = self.attrib()
 		self.credential = None
+		self.type = self.attrib()
+		#self._input_profile = {
+		#	3: self._obj_name_chk,
+		#	4: "credential",
+		#	5: self._obj_name_chk,
+		#	6: "host",
+		#	8: None}
 		self._input_profile = {
 			3: self._obj_name_chk,
-			4: "credential",
-			5: self._obj_name_chk,
-			6: "host",
-			8: None}
+			4: "host",
+			6: ["credential", "type"]}
 		self._attribs = {
-			"credential": self.credentialname, "host": self.host}
-		self._attrib_order = ["credential", "host"]
+			"credential": self.credentialname, "host": self.host, "type": self.type}
+		self._attrib_order = ["host", "credential", "type"]
 		############
 		self._sort_input(inputdata)
 		############
 		self._get_cred()
+		self._check_type()
 	def _get_cred(self):
 		cred = str(self.credentialname)
 		if cred in config.running["credentials"]:
 			self.credential = config_credential({cred: config.running["credentials"][cred]})
+		else:
+			self.credential = config_default({"defaults": config.running["defaults"]})
+	def _check_type(self):
+		if str(self.type) == "":
+			self.type = config.running["defaults"]["device-type"]
 
 #a = ['conman', 'set', 'device', 'SOMEDEVICE', 'host', '10.0.0.1', 'asdf', 'credential', 'MY_CREDS', "otheratt", "otherval", "othersomething2"]
 #a = {'SOMEDEVICE': {'credential': 'MY_CREDS', 'host': '10.0.0.1'}}
@@ -1086,19 +1138,11 @@ class search_class:
 # s.matchlist
 
 
-
-
-
-
-
-
-
-
 class operations_class:  # Container class
 	def connect(self, device):
 		#return None
 		host = {
-			"device_type": "cisco_ios",
+			"device_type": str(device.type),
 			"host": str(device.host),
 			"username": str(device.credential.username),
 			"password": str(device.credential.cred_value)
@@ -1126,18 +1170,6 @@ class operations_class:  # Container class
 			print("Invalid credentials configured for device!")
 
 
-
-
-
-
-
-
-
-
-
-
-
-
 ##### Concatenate a list of words into a space-seperated string           #####
 def cat_list(listname):
 	result = ""
@@ -1163,14 +1195,9 @@ def interpreter():
 		print("- Build private-key config objects (or string processing in scripts)")
 		print("- Integrate Munge engine into system")
 		print("- Clean up text output handling (remove all prints)")
-		print("- Build input checking into config objects?")
-		print("- Allow objects to process commands and send errors to console")
-		print("- Create for-match method to create subscripts and run them")
 		print("- More script functions: elif-match, else, set-variable, enter-config, exit-config")
 		print("- Build: credential-groups, device-groups")
 		print("- Build: Script output class for testing")
-		print("- Create config for device OS types")
-		print("- Create default credential setting")
 	##### HIDDEN #####
 	elif arguments[:6] == "hidden" and len(sys.argv) > 3:
 		config.hidden(sys.argv)
@@ -1211,12 +1238,17 @@ def interpreter():
 		console(" - set credential <name> username <name> [options]             |  Create/modify a credential set to use to log into devices")
 		console(" - set device <name> host <ip or hostname> [options]           |  Create/modify a configured target device for connections")
 		console(" - set script <name> step <step-id> <function> [options]       |  Create/modify a script to run against devices")
+		console(" - set default credential <cred-obj-name>                      |  Set the default credential to use")
+		console(" - set default device-type <device-type>                       |  Set the default device type to use on configured devices")
 	elif (arguments[:14] == "set credential" and len(sys.argv) < 8) or arguments == "set credential":
 		console(" - set credential <name> username <name> (password|private-key) <value>")
-	elif (arguments[:10] == "set device" and len(sys.argv) < 5) or arguments == "set device":
+	elif (arguments[:10] == "set device" and len(sys.argv) < 6) or arguments == "set device":
 		console(" - set device <name> host <ip or hostname> (credential <name>)")
-	elif (arguments[:10] == "set script" and len(sys.argv) < 5) or arguments == "set script":
+	elif (arguments[:10] == "set script" and len(sys.argv) < 7) or arguments == "set script":
 		console(" - set script <name> step <step-id> <function> [options]       | Functions:")
+	elif (arguments[:11] == "set default" and len(sys.argv) < 5) or arguments == "set default":
+		console(" - set default credential <cred-obj-name>                      |  Set the default credential to use")
+		console(" - set default device-type <device-type>                       |  Set the default device type to use on configured devices")
 	elif arguments[:3] == "set" and len(sys.argv) >= 4:
 		config.set(sys.argv)
 	##### RUN #####
@@ -1253,6 +1285,8 @@ def interpreter():
 		console(" - set credential <name> username <name> [options]             |  Create/modify a credential set to use to log into devices")
 		console(" - set device <name> credential <cred-obj> host <ip/hostname>  |  Create/modify a target device for connections")
 		console(" - set script <name> step <step-id> <function> [options]       |  Create/modify a script to run against devices")
+		console(" - set default credential <cred-obj-name>                      |  Set the default credential to use")
+		console(" - set default device-type <device-type>                       |  Set the default device type to use on configured devices")
 		console("----------------------------------------------------------------------------------------------------------------------------------------------")
 		console(" - run script <script-name> device <device-name>               |  Create/modify a script to run against devices")
 		console("----------------------------------------------------------------------------------------------------------------------------------------------")
@@ -1261,20 +1295,6 @@ def interpreter():
 		console(" - clear script <name> [step-id]                               |  Delete a step or whole script from the config")
 		console("----------------------------------------------------------------------------------------------------------------------------------------------")
 
-# conman set script CHANGE_VLAN_10_TO_20 credential MY_CREDS
-# conman set script CHANGE_VLAN_10_TO_20 step 1 send "show run | in interface|switchport access vlan 30"
-# conman set script CHANGE_VLAN_10_TO_20 step 1.1 for-match "FastEthernet1/0/..\n switchport access vlan 30" partial
-# conman set script CHANGE_VLAN_10_TO_20 step 1.1.1 send munge SCRUB_CONFIG
-# conman set script CHANGE_VLAN_10_TO_20 step 2 terminate
-
-
-
-
-# conman set munge SCRUB_CONFIG 1.0 match any
-# conman set munge SCRUB_CONFIG 1.1 set-variable DATA from-match "FastEthernet1/0/..\n switchport access vlan "
-# conman set munge SCRUB_CONFIG 1.2 set-variable IFACE from-string "interface "
-# conman set munge SCRUB_CONFIG 1.3 set-variable VLAN from-string " 40"
-# conman set munge SCRUB_CONFIG 1.4 assemble IFACE DATA VLAN
 
 if __name__ == "__main__":
 	ui = cli()
@@ -1366,10 +1386,84 @@ if __name__ == "__main__":
 
 
 
+# conman set script CHANGE_VLAN_10_TO_20 credential MY_CREDS
+# conman set script CHANGE_VLAN_10_TO_20 step 1 send "show run | in interface|switchport access vlan 30"
+# conman set script CHANGE_VLAN_10_TO_20 step 1.1 for-match "FastEthernet1/0/..\n switchport access vlan 30" partial
+# conman set script CHANGE_VLAN_10_TO_20 step 1.1.1 send munge SCRUB_CONFIG
+# conman set script CHANGE_VLAN_10_TO_20 step 2 terminate
 
 
 
 
+# conman set munge SCRUB_CONFIG 1.0 match any
+# conman set munge SCRUB_CONFIG 1.1 set-variable DATA from-match "FastEthernet1/0/..\n switchport access vlan "
+# conman set munge SCRUB_CONFIG 1.2 set-variable IFACE from-string "interface "
+# conman set munge SCRUB_CONFIG 1.3 set-variable VLAN from-string " 40"
+# conman set munge SCRUB_CONFIG 1.4 assemble IFACE DATA VLAN
 
+
+
+# conman set private-key DEVEL_KEY ^
+# -----BEGIN RSA PRIVATE KEY-----
+# asdfasdfasdfasdf
+# asdfasdfasdfasdf
+# asdfasdfasdfasdf
+# asdfasdfasdfasdf
+# asdfasdfasdfasdf
+# -----END RSA PRIVATE KEY-----
+# ^
+
+# conman set credential MY_CREDS username "admin"
+# conman set credential MY_CREDS password "password123"
+
+# conman set credential DEVEL_CRED username "ec2-user"
+# conman set credential DEVEL_CRED private-key DEVEL_KEY
+
+# conman set device MY_SWITCH host 10.0.0.1 credential MY_CREDS
+# conman set device YOUR_SWITCH host yourswitch.kernshosting.com credential MY_CREDS
+
+# conman set device-group SWITCHES member MY_SWITCH
+# conman set device-group SWITCHES member YOUR_SWITCH
+
+# conman set script REBOOT_SWITCH step 1 send "write"
+# conman set script REBOOT_SWITCH step 1.1 if-match "[OK]" partial
+# conman set script REBOOT_SWITCH step 1.1.1 send "reload"
+# conman set script REBOOT_SWITCH step 1.2 else
+# conman set script REBOOT_SWITCH step 1.2.1 terminate
+# conman set script REBOOT_SWITCH step 2 send "reload"
+# conman set script REBOOT_SWITCH step 2.1 if-match "[confirm]" partial
+# conman set script REBOOT_SWITCH step 2.1.1 send "\n"
+# conman set script REBOOT_SWITCH step 2.2 else
+# conman set script REBOOT_SWITCH step 2.2.1 terminate
+
+# conman set script SOMETHING step 1 send "show ip interface br"
+# conman set script SOMETHING step 1.1 if-match "Gigibit" partial
+# conman set script SOMETHING step 1.1.1 send "write mem"
+# conman set script SOMETHING step 1.1.2 send "show version"
+# conman set script SOMETHING step 1.1.1.1 if-match "15.0.1"
+# conman set script SOMETHING step 1.1.1.1.1 send "show inventory"
+
+# conman set script CHANGE_VLAN_10_TO_20 credential MY_CREDS
+# conman set script CHANGE_VLAN_10_TO_20 step 1 send "show run | in interface|switchport access vlan 30"
+# conman set script CHANGE_VLAN_10_TO_20 step 1.1 for-match "FastEthernet1/0/..\n switchport access vlan 30" partial
+# conman set script CHANGE_VLAN_10_TO_20 step 1.1.1 send munge SCRUB_CONFIG
+# conman set script CHANGE_VLAN_10_TO_20 step 2 terminate
+
+# conman set munge SCRUB_CONFIG 1.0 match any
+# conman set munge SCRUB_CONFIG 1.1 set-variable DATA from-match "FastEthernet1/0/..\n switchport access vlan "
+# conman set munge SCRUB_CONFIG 1.2 set-variable IFACE from-string "interface "
+# conman set munge SCRUB_CONFIG 1.3 set-variable VLAN from-string " 40"
+# conman set munge SCRUB_CONFIG 1.4 assemble IFACE DATA VLAN
+
+# conman set script REBOOT_SWITCH step 1 send "write"
+# conman set script REBOOT_SWITCH step 1.1 if-match "[OK]" partial
+# conman set script REBOOT_SWITCH step 1.1.1 send "reload"
+# conman set script REBOOT_SWITCH step 1.2 else
+# conman set script REBOOT_SWITCH step 1.2.1 terminate
+# conman set script REBOOT_SWITCH step 2 send "reload"
+# conman set script REBOOT_SWITCH step 2.1 if-match "[confirm]" partial
+# conman set script REBOOT_SWITCH step 2.1.1 send "\n"
+# conman set script REBOOT_SWITCH step 2.2 else
+# conman set script REBOOT_SWITCH step 2.2.1 terminate
 
 
