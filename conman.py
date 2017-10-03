@@ -18,13 +18,22 @@ version = "v0.0.1"
 
 
 class test_sock:
-	def __init__(self):
+	def __init__(self, delineator):
 		self.connected = True
-	def multilineinput(self, ending):
+		self.delineator = delineator
+	def send(self, data):
+		print("#"*50)
+		print(data)
+		print("#"*50)
+		return self.multilineinput()
+	def multilineinput(self):
 		result = ""
-		for line in iter(raw_input, ending):
+		print("Enter each line of input End the input with '%s' on a line by itself" % self.delineator)
+		for line in iter(raw_input, self.delineator):
 			result += line+"\n"
 		return result[0:len(result)-1]
+	def send_command_timing(self, data):
+		return self.send(data)
 	def disconnect(self):
 		self.connected = True
 
@@ -80,11 +89,11 @@ _conman_complete()
   prev=${COMP_WORDS[COMP_CWORD-1]}
   prev2=${COMP_WORDS[COMP_CWORD-2]}
   if [ $COMP_CWORD -eq 1 ]; then
-    COMPREPLY=( $(compgen -W "clear set show run" -- $cur) )
+    COMPREPLY=( $(compgen -W "clear set show run test" -- $cur) )
   elif [ $COMP_CWORD -eq 2 ]; then
     case "$prev" in
       "clear")
-        COMPREPLY=( $(compgen -W "credential device script" -- $cur) )
+        COMPREPLY=( $(compgen -W "credential device script private-key" -- $cur) )
         ;;
       "hidden")
         COMPREPLY=( $(compgen -W "show" -- $cur) )
@@ -93,9 +102,12 @@ _conman_complete()
         COMPREPLY=( $(compgen -W "config run" -- $cur) )
         ;;
       "set")
-        COMPREPLY=( $(compgen -W "credential device script default" -- $cur) )
+        COMPREPLY=( $(compgen -W "credential device script default private-key" -- $cur) )
         ;;
       "run")
+        COMPREPLY=( $(compgen -W "script" -- $cur) )
+        ;;
+      "test")
         COMPREPLY=( $(compgen -W "script" -- $cur) )
         ;;
       *)
@@ -116,6 +128,15 @@ _conman_complete()
       default)
         if [ "$prev2" == "set" ]; then
           COMPREPLY=( $(compgen -W "credential device-type" -- $cur) )
+        fi
+        ;;
+      private-key)
+        local inserts=$(for k in `conman hidden show private-keys`; do echo $k ; done)
+        if [ "$prev2" == "set" ]; then
+          COMPREPLY=( $(compgen -W "${inserts} <private-key-name> -" -- $cur) )
+        fi
+        if [ "$prev2" == "clear" ]; then
+          COMPREPLY=( $(compgen -W "${inserts}" -- $cur) )
         fi
         ;;
       credential)
@@ -147,6 +168,9 @@ _conman_complete()
         if [ "$prev2" == "run" ]; then
           COMPREPLY=( $(compgen -W "${inserts}" -- $cur) )
         fi
+        if [ "$prev2" == "test" ]; then
+          COMPREPLY=( $(compgen -W "${inserts}" -- $cur) )
+        fi
         ;;
       show)
         if [ "$prev2" == "hidden" ]; then
@@ -161,6 +185,11 @@ _conman_complete()
     if [ "$prev2" == "credential" ]; then
       if [ "$prev3" == "set" ]; then
         COMPREPLY=( $(compgen -W "username" -- $cur) )
+      fi
+    fi
+    if [ "$prev2" == "private-key" ]; then
+      if [ "$prev3" == "set" ]; then
+        COMPREPLY=( $(compgen -W "<delineator-char> -" -- $cur) )
       fi
     fi
     if [ "$prev2" == "device" ]; then
@@ -190,6 +219,9 @@ _conman_complete()
       fi
       if [ "$prev3" == "run" ]; then
         COMPREPLY=( $(compgen -W "device" -- $cur) )
+      fi
+      if [ "$prev3" == "test" ]; then
+        COMPREPLY=( $(compgen -W "<delineator-char> -" -- $cur) )
       fi
     fi
     if [ "$prev2" == "show" ]; then
@@ -396,6 +428,13 @@ class config_management:
 				return None
 		configtext = "########################\n!\n"
 		####################
+		privatekeytext = ""
+		for key in self.running["private-keys"]:
+			current = config_private_key({key: self.running["private-keys"][key]})
+			privatekeytext += current.set_cmd+"\n"
+		privatekeytext += "!\n########################\n!\n"
+		####################
+		####################
 		credentialtext = ""
 		for credential in self.running["credentials"]:
 			current = config_credential({credential: self.running["credentials"][credential]})
@@ -422,6 +461,7 @@ class config_management:
 		defaulttext += current.set_cmd+"\n"
 		defaulttext += "!\n########################\n"
 		####################
+		configtext += privatekeytext
 		configtext += credentialtext
 		configtext += devicetext
 		configtext += scripttext
@@ -429,7 +469,7 @@ class config_management:
 		print(configtext)
 	def hidden(self, args):
 		item = args[3]
-		simple = ["credentials", "devices", "scripts"]
+		simple = ["credentials", "devices", "scripts", "private-keys"]
 		if item in simple:
 			self.hidden_show_simple(item)
 		elif item == "script-steps":
@@ -449,7 +489,7 @@ class config_management:
 					print step
 	def clear(self, args):
 		function = args[2]
-		simple = ["device", "credential"]
+		simple = ["device", "credential", "private-key"]
 		if function in simple:
 			self.clear_simple(args)
 		elif function == "script":
@@ -493,7 +533,8 @@ class config_management:
 		"device": config_device,
 		"credential": config_credential,
 		"script": script_class,
-		"default": config_default
+		"default": config_default,
+		"private-key": config_private_key
 		}
 		function = args[2]
 		if function in maps:
@@ -666,7 +707,41 @@ class config_default(config_common):
 #c = config_default(a)
 
 
-
+class config_private_key(config_common):
+	def __init__(self, inputdata):
+		self._commons()  # Build common vars
+		############
+		self.function = "private-key"
+		self.delineator = self.attrib()
+		self.key = self.attrib()
+		self._input_profile = {3: self._obj_name_chk}
+		self._attribs = {
+			"key": self.key,
+			"delineator": self.delineator}
+		############
+		self._sort_input(inputdata)
+	def _parse_command(self, inputdata):
+		self.name = inputdata[3]
+		self.delineator = inputdata[4]
+		self.key = self._multilineinput(self.delineator)
+		self._create_attribs()
+	def _parse_config(self, inputdata):
+		for name in inputdata:
+			self.name = name
+		self.delineator = inputdata[self.name]["delineator"]
+		self.key = inputdata[self.name]["key"]
+		self._create_attribs()
+	def _create_attribs(self):
+		self.attrib_list = [self.delineator+"\n"+self.key+"\n"+self.delineator]
+		self.attrib_dict = {"delineator": self.delineator, "key": self.key}
+	def _multilineinput(self, ending):
+		result = ""
+		print("Enter each of the key. End the input with '%s' on a line by itself" % ending)
+		for line in iter(raw_input, ending):
+			result += line+"\n"
+		return result[0:len(result)-1]
+	def readlines(self):
+		return self.key.split("\n")
 
 
 class config_credential(config_common):
@@ -743,6 +818,11 @@ class config_device(config_common):
 #print(c.name, "\n\n", c.host, "\n\n", c.credential)
 #print(c.set_cmd, "\n\n", c.set_cmd_list, "\n\n", c.config)
 #print(c.attrib_list, "\n\n", c.attrib_dict)
+
+
+
+
+
 
 
 # Class for interpreting and executing configured scripts
@@ -1149,11 +1229,23 @@ class operations_class:  # Container class
 		}
 		result = netmiko.ConnectHandler(**host)
 		return result
+	def test(self, args):
+		if args[2] == "script":
+			scriptname = args[3]
+			delineator = args[4]
+			self.test_script(scriptname, delineator)
 	def run(self, args):
 		if args[2] == "script":
 			scriptname = args[3]
 			devicename = args[5]
 			self.run_script(scriptname, devicename)
+	def test_script(self, scriptname, delineator):
+		if scriptname not in list(config.running["scripts"]):
+			print("Script (%s) not in configuration" % scriptname)
+			return None
+		sock = test_sock(delineator)
+		script = script_class({scriptname: config.running["scripts"][scriptname]}, sock)
+		script.run()
 	def run_script(self, scriptname, devicename):
 		if scriptname not in list(config.running["scripts"]):
 			print("Script (%s) not in configuration" % scriptname)
@@ -1168,6 +1260,25 @@ class operations_class:  # Container class
 			script.run()
 		else:
 			print("Invalid credentials configured for device!")
+
+
+# Overwrite of paramiko method to allow pass of file-like object
+def _new_read_private_key_file(self, tag, filename, password=None):
+	##### ORIGINAL #####
+	#def test(self, tag, filename, password=None):
+	#	with open(filename, 'r') as f:
+	#		data = self._read_private_key(tag, f, password)
+	#	return data
+	####################
+	if type(filename) == type(""):
+		with open(filename, 'r') as f:
+			data = self._read_private_key(tag, f, password)
+		return data
+	else:
+		return self._read_private_key(tag, filename, password)
+
+# Overwrite long-ass method path here
+netmiko.base_connection.paramiko.client.RSAKey._read_private_key_file = _new_read_private_key_file
 
 
 ##### Concatenate a list of words into a space-seperated string           #####
@@ -1197,7 +1308,8 @@ def interpreter():
 		print("- Clean up text output handling (remove all prints)")
 		print("- More script functions: elif-match, else, set-variable, enter-config, exit-config")
 		print("- Build: credential-groups, device-groups")
-		print("- Build: Script output class for testing")
+		print("- Add debug to script run. Quiet if not")
+		print("- SSH with custom port")
 	##### HIDDEN #####
 	elif arguments[:6] == "hidden" and len(sys.argv) > 3:
 		config.hidden(sys.argv)
@@ -1235,11 +1347,14 @@ def interpreter():
 		config.show(sys.argv)
 	##### SET #####
 	elif arguments == "set":
+		console(" - set private-key <name> <delineator_char>                    |  Create/modify a RSA private-key to use for SSH authentication")
 		console(" - set credential <name> username <name> [options]             |  Create/modify a credential set to use to log into devices")
 		console(" - set device <name> host <ip or hostname> [options]           |  Create/modify a configured target device for connections")
 		console(" - set script <name> step <step-id> <function> [options]       |  Create/modify a script to run against devices")
 		console(" - set default credential <cred-obj-name>                      |  Set the default credential to use")
 		console(" - set default device-type <device-type>                       |  Set the default device type to use on configured devices")
+	elif (arguments[:15] == "set private-key" and len(sys.argv) < 5):
+		console(" - set private-key <name> <delineator_char>                    |  Create/modify a RSA private-key to use for SSH authentication")
 	elif (arguments[:14] == "set credential" and len(sys.argv) < 8) or arguments == "set credential":
 		console(" - set credential <name> username <name> (password|private-key) <value>")
 	elif (arguments[:10] == "set device" and len(sys.argv) < 6) or arguments == "set device":
@@ -1258,11 +1373,19 @@ def interpreter():
 		console(" - run script <script-name> device <device-name>               |  Create/modify a script to run against devices")
 	elif arguments[:3] == "run" and len(sys.argv) >= 6:
 		operations.run(sys.argv)
+	##### TEST #####
+	elif (arguments[:4] == "test" and len(sys.argv) < 5):
+		console(" - test script <script-name> <delineator>                      |  Test a script by acting as the device (providing output)")
+	elif arguments[:4] == "test" and len(sys.argv) >= 5:
+		operations.test(sys.argv)
 	##### CLEAR #####
 	elif arguments == "clear":
+		console(" - clear private-key <name>                                    |  Delete a private-key from the config")
 		console(" - clear credential <name>                                     |  Delete a credential from the config")
 		console(" - clear device <name>                                         |  Delete a device from the config")
 		console(" - clear script <name> [step-id]                               |  Delete a step or whole script from the config")
+	elif (arguments[:17] == "clear private-key" and len(sys.argv) < 4):
+		console(" - clear private-key <name>                                    |  Delete a private-key from the config")
 	elif (arguments[:16] == "clear credential" and len(sys.argv) < 4) or arguments == "clear credential":
 		console(" - clear credential <name>                                     |  Delete a credential from the config")
 	elif (arguments[:12] == "clear device" and len(sys.argv) < 4) or arguments == "clear device":
@@ -1282,6 +1405,7 @@ def interpreter():
 		console("----------------------------------------------------------------------------------------------------------------------------------------------")
 		console(" - show (config|run) [raw]                                     |  Show the current conman configuration")
 		console("----------------------------------------------------------------------------------------------------------------------------------------------")
+		console(" - set private-key <name> <delineator_char>                    |  Create/modify a RSA private-key to use for SSH authentication")
 		console(" - set credential <name> username <name> [options]             |  Create/modify a credential set to use to log into devices")
 		console(" - set device <name> credential <cred-obj> host <ip/hostname>  |  Create/modify a target device for connections")
 		console(" - set script <name> step <step-id> <function> [options]       |  Create/modify a script to run against devices")
@@ -1290,6 +1414,9 @@ def interpreter():
 		console("----------------------------------------------------------------------------------------------------------------------------------------------")
 		console(" - run script <script-name> device <device-name>               |  Create/modify a script to run against devices")
 		console("----------------------------------------------------------------------------------------------------------------------------------------------")
+		console(" - test script <script-name> <delineator>                      |  Test a script by acting as the device (providing output)")
+		console("----------------------------------------------------------------------------------------------------------------------------------------------")
+		console(" - clear private-key <name>                                    |  Delete a private-key from the config")
 		console(" - clear credential <name>                                     |  Delete a credential from the config")
 		console(" - clear device <name>                                         |  Delete a device from the config")
 		console(" - clear script <name> [step-id]                               |  Delete a step or whole script from the config")
