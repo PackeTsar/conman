@@ -435,8 +435,8 @@ class config_management:
 		privatekeytext = ""
 		for key in self.running["private-keys"]:
 			current = config_private_key({key: self.running["private-keys"][key]})
-			privatekeytext += current.set_cmd+"\n"
-		privatekeytext += "!\n########################\n!\n"
+			privatekeytext += current.set_cmd+"\n!\n"
+		privatekeytext += "########################\n!\n"
 		####################
 		####################
 		credentialtext = ""
@@ -802,29 +802,26 @@ class config_device(config_common):
 		############
 		self.function = "device"
 		self.host = self.attrib()
+		self.port = self.attrib()
 		self.credentialname = self.attrib()
 		self.credential = None
 		self.type = self.attrib()
-		#self._input_profile = {
-		#	3: self._obj_name_chk,
-		#	4: "credential",
-		#	5: self._obj_name_chk,
-		#	6: "host",
-		#	8: None}
 		self._input_profile = {
 			3: self._obj_name_chk,
 			4: "host",
-			6: ["credential", "type"]}
+			6: ["credential", "type", "port"]}
 		self._attribs = {
-			"credential": self.credentialname, "host": self.host, "type": self.type}
-		self._attrib_order = ["host", "credential", "type"]
+			"credential": self.credentialname, "host": self.host, "type": self.type, "port":self.port}
+		self._attrib_order = ["host", "port", "credential", "type"]
 		############
 		self._sort_input(inputdata)
 		############
-		self._check_type()
-	def _check_type(self):
+		self._check_attibs()
+	def _check_attibs(self):
 		if str(self.type) == "":
 			self.type = config.running["defaults"]["device-type"]
+		if str(self.port) == "":
+			self.port = "22"
 	def _get_credentials(self):
 		current = str(self.credentialname)
 		if str(current) == "":  # Blank, so use default creds
@@ -841,7 +838,8 @@ class config_device(config_common):
 		self._get_credentials()
 		result = {
 			"device_type": str(self.type),
-			"host": str(self.host)}
+			"host": str(self.host),
+			"port": int(str(self.port))}
 		result.update(self.credential.connect_data())
 		return result
 	def make_sock(self):
@@ -1315,7 +1313,8 @@ def interpreter():
 	if arguments == "test":
 		print("testing")
 	if arguments == "next":
-		print("- Add port option to device")
+		print("- Write expadable complete method (test.sh in folder)")
+		print("- Add port option to complete")
 		print("- Create working recursive script")
 		print("- script_class should be able to skip steps (after a loop) all together (not nullify)")
 		print("- Build private-key config objects (or string processing in scripts)")
@@ -1365,7 +1364,7 @@ def interpreter():
 	elif arguments == "set":
 		console(" - set private-key <name> <delineator_char>                    |  Create/modify a RSA private-key to use for SSH authentication")
 		console(" - set credential <name> username <name> [options]             |  Create/modify a credential set to use to log into devices")
-		console(" - set device <name> host <ip or hostname> [options]           |  Create/modify a configured target device for connections")
+		console(" - set device <name> host <ip/hostname> [options]              |  Create/modify a target device for connections")
 		console(" - set script <name> step <step-id> <function> [options]       |  Create/modify a script to run against devices")
 		console(" - set default credential <cred-obj-name>                      |  Set the default credential to use")
 		console(" - set default device-type <device-type>                       |  Set the default device type to use on configured devices")
@@ -1374,7 +1373,7 @@ def interpreter():
 	elif (arguments[:14] == "set credential" and len(sys.argv) < 8) or arguments == "set credential":
 		console(" - set credential <name> username <name> (password|private-key) <value>")
 	elif (arguments[:10] == "set device" and len(sys.argv) < 6) or arguments == "set device":
-		console(" - set device <name> host <ip or hostname> (credential <name>)")
+		console(" - set device <name> host <ip/hostname> [options]              |  Create/modify a target device for connections")
 	elif (arguments[:10] == "set script" and len(sys.argv) < 7) or arguments == "set script":
 		console(" - set script <name> step <step-id> <function> [options]       | Functions:")
 	elif (arguments[:11] == "set default" and len(sys.argv) < 5) or arguments == "set default":
@@ -1423,7 +1422,7 @@ def interpreter():
 		console("----------------------------------------------------------------------------------------------------------------------------------------------")
 		console(" - set private-key <name> <delineator_char>                    |  Create/modify a RSA private-key to use for SSH authentication")
 		console(" - set credential <name> username <name> [options]             |  Create/modify a credential set to use to log into devices")
-		console(" - set device <name> credential <cred-obj> host <ip/hostname>  |  Create/modify a target device for connections")
+		console(" - set device <name> host <ip/hostname> [options]              |  Create/modify a target device for connections")
 		console(" - set script <name> step <step-id> <function> [options]       |  Create/modify a script to run against devices")
 		console(" - set default credential <cred-obj-name>                      |  Set the default credential to use")
 		console(" - set default device-type <device-type>                       |  Set the default device type to use on configured devices")
