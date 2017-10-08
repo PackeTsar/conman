@@ -11,6 +11,7 @@ import re
 import sys
 import json
 import netmiko
+import paramiko
 
 
 ##### Inform version here #####
@@ -421,6 +422,8 @@ class config_management:
 		function = args[2]
 		if function == "config" or function == "run":
 			self.show_config(args)
+		else:
+			print("Unknown Command!")
 	def show_config(self, args):
 		if len(args) > 3:
 			if args[3].lower() == "raw":
@@ -720,6 +723,7 @@ class config_private_key(config_common):
 			"delineator": self.delineator}
 		############
 		self._sort_input(inputdata)
+		self.keyobj = paramiko.RSAKey.from_private_key(self) 
 	def _parse_command(self, inputdata):
 		self.name = inputdata[3]
 		self.delineator = inputdata[4]
@@ -778,7 +782,7 @@ class config_credential(config_common):
 				result = {
 					"username": str(self.username),
 					"use_keys": True,
-					"key_file": [pkey]
+					"key_file": pkey.keyobj
 					}
 				return result
 		raise ValueError("Cannot make connect cred data!")
@@ -1269,22 +1273,25 @@ class operations_class:  # Container class
 		script.run()
 
 
-# Overwrite of paramiko method to allow pass of file-like object
-def _new_read_private_key_file(self, tag, filename, password=None):
-	##### ORIGINAL #####
-	#	with open(filename, 'r') as f:
-	#		data = self._read_private_key(tag, f, password)
-	#	return data
-	####################
-	if type(filename) == type(""):
-		with open(filename, 'r') as f:
-			data = self._read_private_key(tag, f, password)
-		return data
-	else:
-		return self._read_private_key(tag, filename, password)
+def _new_connect_params_dict(self):
+	"""Generate dictionary of Paramiko connection parameters."""
+	conn_dict = {
+		'hostname': self.host,
+		'port': self.port,
+		'username': self.username,
+		'password': self.password,
+		'look_for_keys': self.use_keys,
+		'allow_agent': self.allow_agent,
+		'pkey': self.key_file,  ### Modified to pass pkey instead
+		'timeout': self.timeout,
+	}
+	# Check if using SSH 'config' file mainly for SSH proxy support
+	if self.ssh_config_file:
+		conn_dict = self._use_ssh_config(conn_dict)
+	return conn_dict
 
-# Overwrite long-ass method path here
-netmiko.base_connection.paramiko.client.RSAKey._read_private_key_file = _new_read_private_key_file
+# Overwrite the netmiko method here
+netmiko.base_connection.BaseConnection._connect_params_dict = _new_connect_params_dict
 
 
 ##### Concatenate a list of words into a space-seperated string           #####
