@@ -740,7 +740,7 @@ class config_private_key(config_common):
 		for line in iter(raw_input, ending):
 			result += line+"\n"
 		return result[0:len(result)-1]
-	def readlines(self):
+	def readlines(self):  # Used by Paramiko to read out key like a file
 		return self.key.split("\n")
 
 
@@ -766,6 +766,22 @@ class config_credential(config_common):
 		self._attrib_order = ["username", "password", "private-key"]
 		############
 		self._sort_input(inputdata)
+	def connect_data(self):
+		if str(self.cred_method) == "password":
+			result = {
+				"username": str(self.username),
+				"password": str(self.cred_value)}
+			return result
+		elif str(self.cred_method) == "private-key":
+			if str(self.cred_value) in config.running["private-keys"]:
+				pkey = config_private_key({str(self.cred_value): config.running["private-keys"][str(self.cred_value)]})
+				result = {
+					"username": str(self.username),
+					"use_keys": True,
+					"key_file": [pkey]
+					}
+				return result
+		raise ValueError("Cannot make connect cred data!")
 
 #a = ['conman', 'set', 'credential', 'SOMECRED', 'username', 'admin', 'password', 'admin123', "password", "other123", "private-key", "MY_KEY"]
 #a = {'SOMECRED': {'username':'admin', 'password':'admin123', "private-key":"MYKEY"}}
@@ -800,17 +816,32 @@ class config_device(config_common):
 		############
 		self._sort_input(inputdata)
 		############
-		self._get_cred()
 		self._check_type()
-	def _get_cred(self):
-		cred = str(self.credentialname)
-		if cred in config.running["credentials"]:
-			self.credential = config_credential({cred: config.running["credentials"][cred]})
-		else:
-			self.credential = config_default({"defaults": config.running["defaults"]})
 	def _check_type(self):
 		if str(self.type) == "":
 			self.type = config.running["defaults"]["device-type"]
+	def _get_credentials(self):
+		current = str(self.credentialname)
+		if str(current) == "":  # Blank, so use default creds
+			if config.running["defaults"]["credential"] in config.running["credentials"]:  # If default cred exists in config
+				name = config.running["defaults"]["credential"]
+				self.credential = config_credential({name: config.running["credentials"][name]})
+			else:
+				raise ValueError("Credentials not found!")
+		elif current in config.running["credentials"]:
+			self.credential = config_credential({current: config.running["credentials"][current]})
+		else:
+			raise ValueError("Cannot instantiate credentials!")
+	def _make_login(self):
+		self._get_credentials()
+		result = {
+			"device_type": str(self.type),
+			"host": str(self.host)}
+		result.update(self.credential.connect_data())
+		return result
+	def make_sock(self):
+		return netmiko.ConnectHandler(**self._make_login())
+
 
 #a = ['conman', 'set', 'device', 'SOMEDEVICE', 'host', '10.0.0.1', 'asdf', 'credential', 'MY_CREDS', "otheratt", "otherval", "othersomething2"]
 #a = {'SOMEDEVICE': {'credential': 'MY_CREDS', 'host': '10.0.0.1'}}
@@ -818,11 +849,6 @@ class config_device(config_common):
 #print(c.name, "\n\n", c.host, "\n\n", c.credential)
 #print(c.set_cmd, "\n\n", c.set_cmd_list, "\n\n", c.config)
 #print(c.attrib_list, "\n\n", c.attrib_dict)
-
-
-
-
-
 
 
 # Class for interpreting and executing configured scripts
@@ -1173,16 +1199,10 @@ class script_class(config_common):
 				return self.lastoutput
 		return self.lastoutput  # Return the socket after complete
 
-
-
 #c = {'SHORT': {u'steps': {u'1': {u'send': u'show ver'}, u'1.1': {u'dump-input': None}}}}
 #
 #a = script_class(b, None)
 #b = ['conman', 'set', 'script', 'SHORT', 'step', '1', u'send', u'"show ver"']
-
-
-
-
 
 
 class search_class:
@@ -1219,16 +1239,6 @@ class search_class:
 
 
 class operations_class:  # Container class
-	def connect(self, device):
-		#return None
-		host = {
-			"device_type": str(device.type),
-			"host": str(device.host),
-			"username": str(device.credential.username),
-			"password": str(device.credential.cred_value)
-		}
-		result = netmiko.ConnectHandler(**host)
-		return result
 	def test(self, args):
 		if args[2] == "script":
 			scriptname = args[3]
@@ -1254,18 +1264,14 @@ class operations_class:  # Container class
 			print("Device (%s) not in configuration" % devicename)
 			return None
 		device = config_device({devicename: config.running["devices"][devicename]})
-		if device.credential:
-			sock = self.connect(device)
-			script = script_class({scriptname: config.running["scripts"][scriptname]}, sock)
-			script.run()
-		else:
-			print("Invalid credentials configured for device!")
+		sock = device.make_sock()
+		script = script_class({scriptname: config.running["scripts"][scriptname]}, sock)
+		script.run()
 
 
 # Overwrite of paramiko method to allow pass of file-like object
 def _new_read_private_key_file(self, tag, filename, password=None):
 	##### ORIGINAL #####
-	#def test(self, tag, filename, password=None):
 	#	with open(filename, 'r') as f:
 	#		data = self._read_private_key(tag, f, password)
 	#	return data
@@ -1310,6 +1316,8 @@ def interpreter():
 		print("- Build: credential-groups, device-groups")
 		print("- Add debug to script run. Quiet if not")
 		print("- SSH with custom port")
+		print("- Apply scripts as login scripts")
+		print("- ISSUE: A bad RSA key throws a TypeError from Paramiko")
 	##### HIDDEN #####
 	elif arguments[:6] == "hidden" and len(sys.argv) > 3:
 		config.hidden(sys.argv)
