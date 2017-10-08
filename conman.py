@@ -297,7 +297,8 @@ _conman_complete()
           COMPREPLY=( $(compgen -W "<ssh-password> -" -- $cur) )
         fi
         if [ "$prev" == "private-key" ]; then
-          COMPREPLY=( $(compgen -W "<private-key-object-name> -" -- $cur) )
+          local inserts=$(for k in `conman hidden show private-keys`; do echo $k ; done)
+          COMPREPLY=( $(compgen -W "${inserts}" -- $cur) )
         fi
       fi
     fi
@@ -1314,6 +1315,7 @@ def interpreter():
 	if arguments == "test":
 		print("testing")
 	if arguments == "next":
+		print("- Add port option to device")
 		print("- Create working recursive script")
 		print("- script_class should be able to skip steps (after a loop) all together (not nullify)")
 		print("- Build private-key config objects (or string processing in scripts)")
@@ -1324,7 +1326,6 @@ def interpreter():
 		print("- Add debug to script run. Quiet if not")
 		print("- SSH with custom port")
 		print("- Apply scripts as login scripts")
-		print("- ISSUE: A bad RSA key throws a TypeError from Paramiko")
 	##### HIDDEN #####
 	elif arguments[:6] == "hidden" and len(sys.argv) > 3:
 		config.hidden(sys.argv)
