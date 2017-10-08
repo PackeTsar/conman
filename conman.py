@@ -263,7 +263,7 @@ _conman_complete()
     prev5=${COMP_WORDS[COMP_CWORD-5]}
     if [ "$prev5" == "set" ]; then
       if [ "$prev4" == "device" ]; then
-        COMPREPLY=( $(compgen -W "credential type <enter>" -- $cur) )
+        COMPREPLY=( $(compgen -W "credential type port <enter>" -- $cur) )
       fi
     fi
     if [ "$prev5" == "set" ]; then
@@ -288,6 +288,9 @@ _conman_complete()
         if [ "$prev" == "type" ]; then
           local inserts=$(for k in `conman hidden show supported-devices`; do echo $k ; done)
           COMPREPLY=( $(compgen -W "${inserts} <device-type> -" -- $cur) )
+        fi
+        if [ "$prev" == "port" ]; then
+          COMPREPLY=( $(compgen -W "<tcp-port-number> -" -- $cur) )
         fi
       fi
     fi
@@ -334,10 +337,13 @@ _conman_complete()
       fi
       if [ "$prev6" == "device" ]; then
         if [ "$prev2" == "credential" ]; then
-          COMPREPLY=( $(compgen -W "type <enter>" -- $cur) )
+          COMPREPLY=( $(compgen -W "type port <enter>" -- $cur) )
         fi
         if [ "$prev2" == "type" ]; then
-          COMPREPLY=( $(compgen -W "credential <enter>" -- $cur) )
+          COMPREPLY=( $(compgen -W "credential port <enter>" -- $cur) )
+        fi
+        if [ "$prev2" == "port" ]; then
+          COMPREPLY=( $(compgen -W "credential type <enter>" -- $cur) )
         fi
       fi
     fi
@@ -354,6 +360,60 @@ _conman_complete()
         if [ "$prev" == "type" ]; then
           local inserts=$(for k in `conman hidden show supported-devices`; do echo $k ; done)
           COMPREPLY=( $(compgen -W "${inserts} <device-type> -" -- $cur) )
+        fi
+        if [ "$prev" == "port" ]; then
+          COMPREPLY=( $(compgen -W "<tcp-port-number> -" -- $cur) )
+        fi
+      fi
+    fi
+  elif [ $COMP_CWORD -eq 10 ]; then
+    prev2=${COMP_WORDS[COMP_CWORD-2]}
+    prev4=${COMP_WORDS[COMP_CWORD-4]}
+    prev8=${COMP_WORDS[COMP_CWORD-8]}
+    prev9=${COMP_WORDS[COMP_CWORD-9]}
+    if [ "$prev9" == "set" ]; then
+      if [ "$prev8" == "device" ]; then
+        if [ "$prev4" == "credential" ]; then
+          if [ "$prev2" == "type" ]; then
+            COMPREPLY=( $(compgen -W "port <enter>" -- $cur) )
+          fi
+          if [ "$prev2" == "port" ]; then
+            COMPREPLY=( $(compgen -W "type <enter>" -- $cur) )
+          fi
+        fi
+        if [ "$prev4" == "type" ]; then
+          if [ "$prev2" == "port" ]; then
+            COMPREPLY=( $(compgen -W "credential <enter>" -- $cur) )
+          fi
+          if [ "$prev2" == "credential" ]; then
+            COMPREPLY=( $(compgen -W "port <enter>" -- $cur) )
+          fi
+        fi
+        if [ "$prev4" == "port" ]; then
+          if [ "$prev2" == "type" ]; then
+            COMPREPLY=( $(compgen -W "credential <enter>" -- $cur) )
+          fi
+          if [ "$prev2" == "credential" ]; then
+            COMPREPLY=( $(compgen -W "type <enter>" -- $cur) )
+          fi
+        fi
+      fi
+    fi
+  elif [ $COMP_CWORD -eq 11 ]; then
+    prev9=${COMP_WORDS[COMP_CWORD-9]}
+    prev10=${COMP_WORDS[COMP_CWORD-10]}
+    if [ "$prev10" == "set" ]; then
+      if [ "$prev9" == "device" ]; then
+        if [ "$prev" == "credential" ]; then
+          local inserts=$(for k in `conman hidden show credentials`; do echo $k ; done)
+          COMPREPLY=( $(compgen -W "${inserts} <credential-object-name> -" -- $cur) )
+        fi
+        if [ "$prev" == "type" ]; then
+          local inserts=$(for k in `conman hidden show supported-devices`; do echo $k ; done)
+          COMPREPLY=( $(compgen -W "${inserts} <device-type> -" -- $cur) )
+        fi
+        if [ "$prev" == "port" ]; then
+          COMPREPLY=( $(compgen -W "<tcp-port-number> -" -- $cur) )
         fi
       fi
     fi
@@ -457,8 +517,8 @@ class config_management:
 			curscript = ""
 			for cmd in current.set_cmd_list:
 				curscript += " ".join(cmd)+"\n"
-			scripttext += curscript
-		scripttext += "!\n########################\n!\n"
+			scripttext += curscript+"!\n"
+		scripttext += "########################\n!\n"
 		####################
 		defaulttext = ""
 		current = config_default({"defaults": self.running["defaults"]})
@@ -1313,18 +1373,16 @@ def interpreter():
 	if arguments == "test":
 		print("testing")
 	if arguments == "next":
-		print("- Write expadable complete method (test.sh in folder)")
-		print("- Add port option to complete")
 		print("- Create working recursive script")
 		print("- script_class should be able to skip steps (after a loop) all together (not nullify)")
-		print("- Build private-key config objects (or string processing in scripts)")
-		print("- Integrate Munge engine into system")
+		print("- Add munge function (or string processing in scripts)")
 		print("- Clean up text output handling (remove all prints)")
 		print("- More script functions: elif-match, else, set-variable, enter-config, exit-config")
 		print("- Build: credential-groups, device-groups")
 		print("- Add debug to script run. Quiet if not")
 		print("- SSH with custom port")
 		print("- Apply scripts as login scripts")
+		print("- Offload completion to native python")
 	##### HIDDEN #####
 	elif arguments[:6] == "hidden" and len(sys.argv) > 3:
 		config.hidden(sys.argv)
