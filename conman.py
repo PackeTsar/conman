@@ -94,7 +94,7 @@ _conman_complete()
   elif [ $COMP_CWORD -eq 2 ]; then
     case "$prev" in
       "clear")
-        COMPREPLY=( $(compgen -W "credential device script private-key" -- $cur) )
+        COMPREPLY=( $(compgen -W "credential device device-group script private-key" -- $cur) )
         ;;
       "hidden")
         COMPREPLY=( $(compgen -W "show" -- $cur) )
@@ -103,7 +103,7 @@ _conman_complete()
         COMPREPLY=( $(compgen -W "config run" -- $cur) )
         ;;
       "set")
-        COMPREPLY=( $(compgen -W "credential device script default private-key" -- $cur) )
+        COMPREPLY=( $(compgen -W "credential device device-group script default private-key" -- $cur) )
         ;;
       "run")
         COMPREPLY=( $(compgen -W "script" -- $cur) )
@@ -158,6 +158,15 @@ _conman_complete()
           COMPREPLY=( $(compgen -W "${inserts}" -- $cur) )
         fi
         ;;
+      device-group)
+        local inserts=$(for k in `conman hidden show device-groups`; do echo $k ; done)
+        if [ "$prev2" == "set" ]; then
+          COMPREPLY=( $(compgen -W "${inserts} <device-group-name> -" -- $cur) )
+        fi
+        if [ "$prev2" == "clear" ]; then
+          COMPREPLY=( $(compgen -W "${inserts}" -- $cur) )
+        fi
+        ;;
       script)
         local inserts=$(for k in `conman hidden show scripts`; do echo $k ; done)
         if [ "$prev2" == "set" ]; then
@@ -175,7 +184,7 @@ _conman_complete()
         ;;
       show)
         if [ "$prev2" == "hidden" ]; then
-          COMPREPLY=( $(compgen -W "credentials devices scripts script-steps supported-devices -" -- $cur) )
+          COMPREPLY=( $(compgen -W "credentials devices device-groups device-group-members scripts script-steps supported-devices -" -- $cur) )
         fi
         ;;
       *)
@@ -196,6 +205,15 @@ _conman_complete()
     if [ "$prev2" == "device" ]; then
       if [ "$prev3" == "set" ]; then
         COMPREPLY=( $(compgen -W "host" -- $cur) )
+      fi
+    fi
+    if [ "$prev2" == "device-group" ]; then
+      if [ "$prev3" == "set" ]; then
+        COMPREPLY=( $(compgen -W "member" -- $cur) )
+      fi
+      if [ "$prev3" == "clear" ]; then
+        local inserts=$(for k in `conman hidden show device-group-members $prev`; do echo $k ; done)
+        COMPREPLY=( $(compgen -W "${inserts} all" -- $cur) )
       fi
     fi
     if [ "$prev2" == "default" ]; then
@@ -231,6 +249,10 @@ _conman_complete()
           local inserts=$(for k in `conman hidden show scripts`; do echo $k ; done)
           COMPREPLY=( $(compgen -W "${inserts}" -- $cur) )
         fi
+        if [ "$prev" == "device-group-members" ]; then
+          local inserts=$(for k in `conman hidden show device-groups`; do echo $k ; done)
+          COMPREPLY=( $(compgen -W "${inserts}" -- $cur) )
+        fi
       fi
     fi
   elif [ $COMP_CWORD -eq 5 ]; then
@@ -239,6 +261,15 @@ _conman_complete()
     if [ "$prev4" == "set" ]; then
       if [ "$prev3" == "device" ]; then
         COMPREPLY=( $(compgen -W "<hostname-or-IP-address> -" -- $cur) )
+      fi
+    fi
+    if [ "$prev4" == "set" ]; then
+      if [ "$prev3" == "device-group" ]; then
+        if [ "$prev" == "member" ]; then
+          local inserts=$(for k in `conman hidden show devices`; do echo $k ; done)
+          local inserts2=$(for k in `conman hidden show device-groups`; do echo $k ; done)
+          COMPREPLY=( $(compgen -W "${inserts} ${inserts2} <device-name> -" -- $cur) )
+        fi
       fi
     fi
     if [ "$prev4" == "set" ]; then
@@ -255,7 +286,8 @@ _conman_complete()
     if [ "$prev4" == "run" ]; then
       if [ "$prev3" == "script" ]; then
         local inserts=$(for k in `conman hidden show devices`; do echo $k ; done)
-        COMPREPLY=( $(compgen -W "${inserts} <step-id> -" -- $cur) )
+        local inserts2=$(for k in `conman hidden show device-groups`; do echo $k ; done)
+        COMPREPLY=( $(compgen -W "${inserts} ${inserts2} -" -- $cur) )
       fi
     fi
   elif [ $COMP_CWORD -eq 6 ]; then
@@ -509,6 +541,11 @@ class config_management:
 		for device in self.running["devices"]:
 			current = config_device({device: self.running["devices"][device]})
 			devicetext += current.set_cmd+"\n"
+		devicetext += "!\n!\n"
+		#########
+		for group in self.running["device-groups"]:
+			current = config_device_group({group: self.running["device-groups"][group]})
+			devicetext += current.set_cmd+"\n!\n"
 		devicetext += "!\n########################\n!\n"
 		####################
 		scripttext = ""
@@ -533,7 +570,7 @@ class config_management:
 		print(configtext)
 	def hidden(self, args):
 		item = args[3]
-		simple = ["credentials", "devices", "scripts", "private-keys"]
+		simple = ["credentials", "devices", "scripts", "private-keys", "device-groups"]
 		if item in simple:
 			self.hidden_show_simple(item)
 		elif item == "script-steps":
@@ -541,16 +578,24 @@ class config_management:
 		elif item == "supported-devices":
 			for each in self.supported_devices:
 				print(each)
+		elif item == "device-group-members":
+			self.hidden_show_device_group_members(args)
 	def hidden_show_simple(self, item):
 		if item in list(self.running):
 			for each in self.running[item]:
 				print(each)
 	def hidden_show_script_steps(self, args):
-		script = item = args[4]
+		script = args[4]
 		if "scripts" in list(self.running):
 			if script in list(self.running["scripts"]):
 				for step in self.running["scripts"][script]["steps"]:
 					print step
+	def hidden_show_device_group_members(self, args):
+		group = args[4]
+		if "device-groups" in list(self.running):
+			if group in list(self.running["device-groups"]):
+				for member in self.running["device-groups"][group]["members"]:
+					print member
 	def clear(self, args):
 		function = args[2]
 		simple = ["device", "credential", "private-key"]
@@ -558,6 +603,8 @@ class config_management:
 			self.clear_simple(args)
 		elif function == "script":
 			self.clear_script(args)
+		elif function == "device-group":
+			self.clear_device_group(args)
 		else:
 			print("Unknown function!")
 	def clear_simple(self, args):
@@ -592,9 +639,35 @@ class config_management:
 				print("%s not in %s!" % (name, function))
 		else:
 			print("%s not in config!" % function)
+	def clear_device_group(self, args):
+		if len(args) < 5:
+			print("Incomplete command!")
+			return None
+		function = args[2]+"s"
+		name = args[3]
+		member = args[4]
+		if function in list(self.running):
+			if name in list(self.running[function]):
+				if member == "all":
+					del self.running[function][name]
+					self.save()
+				elif member in self.running[function][name]["members"]:
+					index = 0
+					for mem in self.running[function][name]["members"]:
+						if mem == member:
+							del self.running[function][name]["members"][index]
+						index += 1
+					self.save()
+				else:
+					print("member %s not in device-group %s!" % (member, name))
+			else:
+				print("%s not in %s!" % (name, function))
+		else:
+			print("%s not in config!" % function)
 	def set(self, args):
 		maps = {
 		"device": config_device,
+		"device-group": config_device_group,
 		"credential": config_credential,
 		"script": script_class,
 		"default": config_default,
@@ -602,9 +675,9 @@ class config_management:
 		}
 		function = args[2]
 		if function in maps:
-			newobj = maps[function](args)
 			if function+"s" not in list(self.running):
 				self.running.update({function+"s": {}})
+			newobj = maps[function](args)
 			self.running[function+"s"].update(newobj.config)
 			self.save()
 		else:
@@ -877,6 +950,15 @@ class config_device(config_common):
 		self._sort_input(inputdata)
 		############
 		self._check_attibs()
+		self.next = self.__next__  # Python2 Compatibility
+	def __iter__(self):
+		self._iter_index = 0
+		return self
+	def __next__(self): # Python 3: def __next__(self)
+		while self._iter_index == 0:
+			self._iter_index += 1
+			return self
+		raise StopIteration
 	def _check_attibs(self):
 		if str(self.type) == "":
 			self.type = config.running["defaults"]["device-type"]
@@ -905,13 +987,80 @@ class config_device(config_common):
 	def make_sock(self):
 		return netmiko.ConnectHandler(**self._make_login())
 
-
 #a = ['conman', 'set', 'device', 'SOMEDEVICE', 'host', '10.0.0.1', 'asdf', 'credential', 'MY_CREDS', "otheratt", "otherval", "othersomething2"]
 #a = {'SOMEDEVICE': {'credential': 'MY_CREDS', 'host': '10.0.0.1'}}
 #c = config_device(a)
 #print(c.name, "\n\n", c.host, "\n\n", c.credential)
 #print(c.set_cmd, "\n\n", c.set_cmd_list, "\n\n", c.config)
 #print(c.attrib_list, "\n\n", c.attrib_dict)
+
+
+class config_device_group(config_common):
+	def __init__(self, inputdata):
+		self._commons()  # Build common vars
+		############
+		self.function = "device-group"
+		self.memberlist = []
+		self.currentmember = None
+		self._input_profile = {
+			3: self._obj_name_chk,
+			4: "member",
+			6: self._obj_name_chk}
+		#self._attribs = {
+		#	"member": self.currentmember}
+		#self._attrib_order = ["member"]
+		############
+		self._sort_input(inputdata)
+		self.next = self.__next__  # Python2 Compatibility
+	def __iter__(self):
+		self._iter_index = 0
+		return self
+	def __next__(self): # Python 3: def __next__(self)
+		while self._iter_index != len(self.memberlist):
+			result = self._get_device(self.memberlist[self._iter_index])
+			self._iter_index += 1
+			if result:
+				return result
+		raise StopIteration
+	def _parse_command(self, inputdata):
+		name = inputdata[3]
+		self.currentmember = inputdata[5]
+		if name not in config.running["device-groups"]:
+			self._parse_config({name: {"members": [str(self.currentmember)]}})
+		else:
+			self._parse_config({name: config.running["device-groups"][name]})
+			if str(self.currentmember) not in self.config[name]["members"]:
+				self.config[name]["members"].append(str(self.currentmember))
+	def _parse_config(self, inputdata):
+		for name in inputdata:
+			self.name = name
+		self.config = inputdata
+		for member in self.config[self.name]["members"]:
+			self.memberlist.append(member)
+	def _fill_in(self):
+		self.set_cmd_list = []
+		for member in self.memberlist:
+			temp = ["conman", "set", "device-group", self.name, "member", member]
+			self.set_cmd_list.append(temp)
+		self.set_cmd = ""
+		for cmd in self.set_cmd_list:
+			self.set_cmd += " ".join(cmd)+"\n"
+		self.set_cmd = self.set_cmd[:len(self.set_cmd)-1]  # Rm last \n
+	def _get_next_device(self):
+		while self._iter_index != len(self.memberlist)-1:
+			result = self._get_device(self.memberlist[self._iter_index])
+			self._iter_index += 1
+			if result:
+				return result
+		return None
+	def _get_device(self, devicename):
+		if devicename in list(config.running["devices"]):
+			return config_device({devicename: config.running["devices"][devicename]})
+		elif devicename in list(config.running["device-groups"]):
+			return config_device_group({devicename: config.running["device-groups"][devicename]})
+		else:
+			print("Device (%s) doesn't exist!" % devicename)
+			return None
 
 
 # Class for interpreting and executing configured scripts
@@ -1244,21 +1393,22 @@ class script_class(config_common):
 		for step in self.steps:  # Iter through step objects in order
 			if not self.terminate:
 				#####
-				ui.write_log("Executing step %s" % step.origstr)
+				#ui.write_log("Executing step %s" % step.origstr)
 				inputdata = step.input  # Pull output from last loop
 				function = list(step.instructions)[0]  # Set function name
-				ui.write_log("Instructions: %s" % step.instructions)
+				#ui.write_log("Instructions: %s" % step.instructions)
 				#####
 				if not step.valid:  # If it has been marked invalid
-					ui.write_log("Step %s has been invalidated. Skipping" 
-						% step.origstr)
+					pass
+					#ui.write_log("Step %s has been invalidated. Skipping" 
+					#	% step.origstr)
 				else:
-					ui.write_log("Step %s is valid. Continuing" % step.origstr)
+					#ui.write_log("Step %s is valid. Continuing" % step.origstr)
 					funcmap[function](step)
-				ui.write_log("Step %s complete" % step.origstr)
-				ui.write_log("\n\n\n")
+				#ui.write_log("Step %s complete" % step.origstr)
+				#ui.write_log("\n\n\n")
 			else:
-				ui.write_log("Terminate flag set. Terminating script")
+				#ui.write_log("Terminate flag set. Terminating script")
 				return self.lastoutput
 		return self.lastoutput  # Return the socket after complete
 
@@ -1319,17 +1469,32 @@ class operations_class:  # Container class
 		sock = test_sock(delineator)
 		script = script_class({scriptname: config.running["scripts"][scriptname]}, sock)
 		script.run()
-	def run_script(self, scriptname, devicename):
+	def _script_exists(self, scriptname):
 		if scriptname not in list(config.running["scripts"]):
 			print("Script (%s) not in configuration" % scriptname)
-			return None
-		if devicename not in list(config.running["devices"]):
+			return False
+		else:
+			return True
+	def _get_device(self, devicename):
+		if devicename in list(config.running["devices"]):
+			return config_device({devicename: config.running["devices"][devicename]})
+		elif devicename in list(config.running["device-groups"]):
+			return config_device_group({devicename: config.running["device-groups"][devicename]})
+		else:
 			print("Device (%s) not in configuration" % devicename)
 			return None
-		device = config_device({devicename: config.running["devices"][devicename]})
-		sock = device.make_sock()
-		script = script_class({scriptname: config.running["scripts"][scriptname]}, sock)
-		script.run()
+	def run_script(self, scriptname, devicename):
+		if self._script_exists(scriptname):
+			devices = self._get_device(devicename)
+			if devices:
+				for device in devices:
+					if device.function == "device-group":
+						self.run_script(scriptname, device.name)
+					else:
+						sock = device.make_sock()
+						script = script_class({scriptname:
+							config.running["scripts"][scriptname]}, sock)
+						script.run()
 
 
 def _new_connect_params_dict(self):
@@ -1370,19 +1535,23 @@ def interpreter():
 	global config
 	config = config_management()
 	operations = operations_class()
-	if arguments == "test":
-		print("testing")
 	if arguments == "next":
-		print("- Create working recursive script")
-		print("- script_class should be able to skip steps (after a loop) all together (not nullify)")
-		print("- Add munge function (or string processing in scripts)")
-		print("- Clean up text output handling (remove all prints)")
-		print("- More script functions: elif-match, else, set-variable, enter-config, exit-config")
-		print("- Build: credential-groups, device-groups")
-		print("- Add debug to script run. Quiet if not")
-		print("- SSH with custom port")
-		print("- Apply scripts as login scripts")
-		print("- Offload completion to native python")
+		print("""
+	LOGGING/DEBUGGING:
+		- Build in debugging/logging
+		- Add debug to script run. Quiet if not
+		- Clean up text output handling (remove all prints)
+	CLEANUP/FIXES
+		- Offload completion to native python
+		- script_class should be able to skip steps (after a loop) all together (not nullify)
+	TESTING
+		- Create working recursive script
+	NEW FEATURES
+		- Add munge function (or string processing in scripts)
+		- More script functions: elif-match, else, set-variable, enter-config, exit-config
+		- Build: credential-groups
+		- Apply scripts as login scripts
+		""")
 	##### HIDDEN #####
 	elif arguments[:6] == "hidden" and len(sys.argv) > 3:
 		config.hidden(sys.argv)
@@ -1423,6 +1592,7 @@ def interpreter():
 		console(" - set private-key <name> <delineator_char>                    |  Create/modify a RSA private-key to use for SSH authentication")
 		console(" - set credential <name> username <name> [options]             |  Create/modify a credential set to use to log into devices")
 		console(" - set device <name> host <ip/hostname> [options]              |  Create/modify a target device for connections")
+		console(" - set device-group <name> member <device-name>                |  Create/Modify a device group by adding a member device")
 		console(" - set script <name> step <step-id> <function> [options]       |  Create/modify a script to run against devices")
 		console(" - set default credential <cred-obj-name>                      |  Set the default credential to use")
 		console(" - set default device-type <device-type>                       |  Set the default device type to use on configured devices")
@@ -1430,8 +1600,11 @@ def interpreter():
 		console(" - set private-key <name> <delineator_char>                    |  Create/modify a RSA private-key to use for SSH authentication")
 	elif (arguments[:14] == "set credential" and len(sys.argv) < 8) or arguments == "set credential":
 		console(" - set credential <name> username <name> (password|private-key) <value>")
+	elif arguments[:16] == "set device-group" and len(sys.argv) < 6:
+		console(" - set device-group <name> member <device-name>                |  Create/Modify a device group by adding a member device")
 	elif (arguments[:10] == "set device" and len(sys.argv) < 6) or arguments == "set device":
 		console(" - set device <name> host <ip/hostname> [options]              |  Create/modify a target device for connections")
+		console(" - set device-group <name> member <device-name>                |  Create/Modify a device group by adding a member device")
 	elif (arguments[:10] == "set script" and len(sys.argv) < 7) or arguments == "set script":
 		console(" - set script <name> step <step-id> <function> [options]       | Functions:")
 	elif (arguments[:11] == "set default" and len(sys.argv) < 5) or arguments == "set default":
@@ -1456,15 +1629,19 @@ def interpreter():
 		console(" - clear private-key <name>                                    |  Delete a private-key from the config")
 		console(" - clear credential <name>                                     |  Delete a credential from the config")
 		console(" - clear device <name>                                         |  Delete a device from the config")
-		console(" - clear script <name> [step-id]                               |  Delete a step or whole script from the config")
+		console(" - clear device-group <name> (all|<member-name>)               |  Delete a device-group member or group from the config")
+		console(" - clear script <name> (all|<step-id>)                         |  Delete a step or whole script from the config")
 	elif (arguments[:17] == "clear private-key" and len(sys.argv) < 4):
 		console(" - clear private-key <name>                                    |  Delete a private-key from the config")
 	elif (arguments[:16] == "clear credential" and len(sys.argv) < 4) or arguments == "clear credential":
 		console(" - clear credential <name>                                     |  Delete a credential from the config")
+	elif arguments[:18] == "clear device-group" and len(sys.argv) < 5:
+		console(" - clear device-group <name> (all|<member-name>)               |  Delete a device-group member or group from the config")
 	elif (arguments[:12] == "clear device" and len(sys.argv) < 4) or arguments == "clear device":
 		console(" - clear device <name>                                         |  Delete a device from the config")
+		console(" - clear device-group <name> (all|<member-name>)               |  Delete a device-group member or group from the config")
 	elif (arguments[:12] == "clear script" and len(sys.argv) < 4) or arguments == "clear script":
-		console(" - clear script <name> [step-id]                               |  Delete a step or whole script from the config")
+		console(" - clear script <name> (all|<step-id>)                         |  Delete a step or whole script from the config")
 	elif arguments[:5] == "clear" and len(sys.argv) >= 4:
 		config.clear(sys.argv)
 	######################
@@ -1481,6 +1658,7 @@ def interpreter():
 		console(" - set private-key <name> <delineator_char>                    |  Create/modify a RSA private-key to use for SSH authentication")
 		console(" - set credential <name> username <name> [options]             |  Create/modify a credential set to use to log into devices")
 		console(" - set device <name> host <ip/hostname> [options]              |  Create/modify a target device for connections")
+		console(" - set device-group <name> member <device-name>                |  Create/Modify a device group by adding a member device")
 		console(" - set script <name> step <step-id> <function> [options]       |  Create/modify a script to run against devices")
 		console(" - set default credential <cred-obj-name>                      |  Set the default credential to use")
 		console(" - set default device-type <device-type>                       |  Set the default device type to use on configured devices")
@@ -1492,7 +1670,8 @@ def interpreter():
 		console(" - clear private-key <name>                                    |  Delete a private-key from the config")
 		console(" - clear credential <name>                                     |  Delete a credential from the config")
 		console(" - clear device <name>                                         |  Delete a device from the config")
-		console(" - clear script <name> [step-id]                               |  Delete a step or whole script from the config")
+		console(" - clear device-group <name> (all|<member-name>)               |  Delete a device-group member or complete group from the config")
+		console(" - clear script <name> (all|<step-id>)                         |  Delete a step or whole script from the config")
 		console("----------------------------------------------------------------------------------------------------------------------------------------------")
 
 
