@@ -550,7 +550,7 @@ class config_management:
 		####################
 		scripttext = ""
 		for script in self.running["scripts"]:
-			current = script_class({script: self.running["scripts"][script]}, None)
+			current = config_script({script: self.running["scripts"][script]}, None)
 			curscript = ""
 			for cmd in current.set_cmd_list:
 				curscript += " ".join(cmd)+"\n"
@@ -669,7 +669,7 @@ class config_management:
 		"device": config_device,
 		"device-group": config_device_group,
 		"credential": config_credential,
-		"script": script_class,
+		"script": config_script,
 		"default": config_default,
 		"private-key": config_private_key
 		}
@@ -1064,7 +1064,7 @@ class config_device_group(config_common):
 
 
 # Class for interpreting and executing configured scripts
-class script_class(config_common):
+class config_script(config_common):
 	def __init__(self, inputdata, sock=None, globalinput=None):
 		self._commons()  # Build common vars
 		############
@@ -1368,13 +1368,13 @@ class script_class(config_common):
 		search = search_class(regex, step.input)
 		childinst = self.steps.get_offspring_config()
 		for match in search.matchlist:
-			newscript = script_class({step.str: {"steps": childinst}}, self.sock, globalinput=match)
+			newscript = config_script({step.str: {"steps": childinst}}, self.sock, globalinput=match)
 			newscript.run()
 		self.steps.nullify() # Nullify offspring to prevent linear run
 	def _run_script(self, step):
 		script = step.instructions["run-script"]
 		if script in config.running["scripts"]:
-			newscript = script_class({script: config.running["scripts"][script]}, self.sock, globalinput=step.input)
+			newscript = config_script({script: config.running["scripts"][script]}, self.sock, globalinput=step.input)
 			output = newscript.run()
 			self.__output(output)
 		else:
@@ -1414,7 +1414,7 @@ class script_class(config_common):
 
 #c = {'SHORT': {u'steps': {u'1': {u'send': u'show ver'}, u'1.1': {u'dump-input': None}}}}
 #
-#a = script_class(b, None)
+#a = config_script(b, None)
 #b = ['conman', 'set', 'script', 'SHORT', 'step', '1', u'send', u'"show ver"']
 
 
@@ -1467,7 +1467,7 @@ class operations_class:  # Container class
 			print("Script (%s) not in configuration" % scriptname)
 			return None
 		sock = test_sock(delineator)
-		script = script_class({scriptname: config.running["scripts"][scriptname]}, sock)
+		script = config_script({scriptname: config.running["scripts"][scriptname]}, sock)
 		script.run()
 	def _script_exists(self, scriptname):
 		if scriptname not in list(config.running["scripts"]):
@@ -1492,7 +1492,7 @@ class operations_class:  # Container class
 						self.run_script(scriptname, device.name)
 					else:
 						sock = device.make_sock()
-						script = script_class({scriptname:
+						script = config_script({scriptname:
 							config.running["scripts"][scriptname]}, sock)
 						script.run()
 
@@ -1543,7 +1543,7 @@ def interpreter():
 		- Clean up text output handling (remove all prints)
 	CLEANUP/FIXES
 		- Offload completion to native python
-		- script_class should be able to skip steps (after a loop) all together (not nullify)
+		- config_script should be able to skip steps (after a loop) all together (not nullify)
 	TESTING
 		- Create working recursive script
 	NEW FEATURES
@@ -1678,7 +1678,7 @@ def interpreter():
 if __name__ == "__main__":
 	ui = cli()
 	interpreter()
-	#s = script_class(config["scripts"]["MY_SCRIPT"], "")
+	#s = config_script(config["scripts"]["MY_SCRIPT"], "")
 	#s.run()
 
 
