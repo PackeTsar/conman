@@ -22,6 +22,7 @@ version = "v0.0.1"
 
 class test_sock:
 	def __init__(self, delineator):
+		debug("Starting")
 		self.connected = True
 		self.delineator = delineator
 	def send(self, data):
@@ -96,7 +97,7 @@ _conman_complete()
   elif [ $COMP_CWORD -eq 2 ]; then
     case "$prev" in
       "clear")
-        COMPREPLY=( $(compgen -W "credential device device-group script private-key" -- $cur) )
+        COMPREPLY=( $(compgen -W "credential debug device device-group script private-key" -- $cur) )
         ;;
       "hidden")
         COMPREPLY=( $(compgen -W "show" -- $cur) )
@@ -105,7 +106,7 @@ _conman_complete()
         COMPREPLY=( $(compgen -W "config run" -- $cur) )
         ;;
       "set")
-        COMPREPLY=( $(compgen -W "credential device device-group script default private-key" -- $cur) )
+        COMPREPLY=( $(compgen -W "credential debug device device-group script default private-key" -- $cur) )
         ;;
       "run")
         COMPREPLY=( $(compgen -W "script" -- $cur) )
@@ -169,6 +170,14 @@ _conman_complete()
           COMPREPLY=( $(compgen -W "${inserts}" -- $cur) )
         fi
         ;;
+      debug)
+        if [ "$prev2" == "set" ]; then
+          COMPREPLY=( $(compgen -W "module timestamp tracepath format" -- $cur) )
+        fi
+        if [ "$prev2" == "clear" ]; then
+          COMPREPLY=( $(compgen -W "module" -- $cur) )
+        fi
+        ;;
       script)
         local inserts=$(for k in `conman hidden show scripts`; do echo $k ; done)
         if [ "$prev2" == "set" ]; then
@@ -186,7 +195,7 @@ _conman_complete()
         ;;
       show)
         if [ "$prev2" == "hidden" ]; then
-          COMPREPLY=( $(compgen -W "credentials devices device-groups device-group-members scripts script-steps supported-devices -" -- $cur) )
+          COMPREPLY=( $(compgen -W "credentials devices device-groups device-group-members scripts script-steps supported-devices possible-debugs current-debugs -" -- $cur) )
         fi
         ;;
       *)
@@ -230,6 +239,29 @@ _conman_complete()
         fi
       fi
     fi
+    if [ "$prev2" == "debug" ]; then
+      if [ "$prev3" == "set" ]; then
+        if [ "$prev" == "module" ]; then
+          local inserts=$(for k in `conman hidden show possible-debugs`; do echo $k ; done)
+          COMPREPLY=( $(compgen -W "${inserts}" -- $cur) )
+        fi
+        if [ "$prev" == "timestamp" ]; then
+          COMPREPLY=( $(compgen -W "<timestamp-format> -" -- $cur) )
+        fi
+        if [ "$prev" == "tracepath" ]; then
+          COMPREPLY=( $(compgen -W "full caller" -- $cur) )
+        fi
+        if [ "$prev" == "format" ]; then
+          COMPREPLY=( $(compgen -W "<debugging-format> -" -- $cur) )
+        fi
+      fi
+      if [ "$prev3" == "clear" ]; then
+        if [ "$prev" == "module" ]; then
+          local inserts=$(for k in `conman hidden show current-debugs`; do echo $k ; done)
+          COMPREPLY=( $(compgen -W "${inserts}" -- $cur) )
+        fi
+      fi
+    fi
     if [ "$prev2" == "script" ]; then
       if [ "$prev3" == "set" ]; then
         COMPREPLY=( $(compgen -W "step" -- $cur) )
@@ -260,6 +292,11 @@ _conman_complete()
   elif [ $COMP_CWORD -eq 5 ]; then
     prev3=${COMP_WORDS[COMP_CWORD-3]}
     prev4=${COMP_WORDS[COMP_CWORD-4]}
+    if [ "$prev4" == "set" ]; then
+      if [ "$prev3" == "debug" ]; then
+        COMPREPLY=( $(compgen -W "level" -- $cur) )
+      fi
+    fi
     if [ "$prev4" == "set" ]; then
       if [ "$prev3" == "device" ]; then
         COMPREPLY=( $(compgen -W "<hostname-or-IP-address> -" -- $cur) )
@@ -295,6 +332,11 @@ _conman_complete()
   elif [ $COMP_CWORD -eq 6 ]; then
     prev4=${COMP_WORDS[COMP_CWORD-4]}
     prev5=${COMP_WORDS[COMP_CWORD-5]}
+    if [ "$prev5" == "set" ]; then
+      if [ "$prev4" == "debug" ]; then
+        COMPREPLY=( $(compgen -W "<debug-level> -" -- $cur) )
+      fi
+    fi
     if [ "$prev5" == "set" ]; then
       if [ "$prev4" == "device" ]; then
         COMPREPLY=( $(compgen -W "credential type port <enter>" -- $cur) )
@@ -526,6 +568,12 @@ class config_management:
 				return None
 		configtext = "########################\n!\n"
 		####################
+		debugtext = ""
+		current = config_debug({"debugs": self.running["debugs"]})
+		debugtext += current.set_cmd+"\n!\n"
+		debugtext += "########################\n!\n"
+		####################
+		####################
 		privatekeytext = ""
 		for key in self.running["private-keys"]:
 			current = config_private_key({key: self.running["private-keys"][key]})
@@ -564,6 +612,7 @@ class config_management:
 		defaulttext += current.set_cmd+"\n"
 		defaulttext += "!\n########################\n"
 		####################
+		configtext += debugtext
 		configtext += privatekeytext
 		configtext += credentialtext
 		configtext += devicetext
@@ -575,6 +624,10 @@ class config_management:
 		simple = ["credentials", "devices", "scripts", "private-keys", "device-groups"]
 		if item in simple:
 			self.hidden_show_simple(item)
+		elif item == "possible-debugs":
+			self.hidden_show_possible_debugs(args)
+		elif item == "current-debugs":
+			self.hidden_show_current_debugs(args)
 		elif item == "script-steps":
 			self.hidden_show_script_steps(args)
 		elif item == "supported-devices":
@@ -586,6 +639,12 @@ class config_management:
 		if item in list(self.running):
 			for each in self.running[item]:
 				print(each)
+	def hidden_show_possible_debugs(self, args):
+		for mod in debug.get_mod_list():
+			print(mod)
+	def hidden_show_current_debugs(self, args):
+		for mod in self.running["debugs"]["modules"]:
+			print(mod)
 	def hidden_show_script_steps(self, args):
 		script = args[4]
 		if "scripts" in list(self.running):
@@ -607,6 +666,8 @@ class config_management:
 			self.clear_script(args)
 		elif function == "device-group":
 			self.clear_device_group(args)
+		elif function == "debug":
+			self.clear_debug(args)
 		else:
 			print("Unknown function!")
 	def clear_simple(self, args):
@@ -620,6 +681,19 @@ class config_management:
 				print("%s not in %s!" % (name, function))
 		else:
 			print("%s not in config!" % function)
+	def clear_debug(self, args):
+		module = args[4]
+		if len(args) < 5:
+			print("Incomplete command!")
+			return None
+		elif args[3] != "module":
+			print("Cannot remove %s" % args[3])
+			return None
+		elif module not in self.running["debugs"]["modules"]:
+			print("Module %s not set to debug!" % module)
+			return None
+		del self.running["debugs"]["modules"][module]
+		self.save()
 	def clear_script(self, args):
 		if len(args) < 5:
 			print("Incomplete command!")
@@ -673,6 +747,7 @@ class config_management:
 		"credential": config_credential,
 		"script": config_script,
 		"default": config_default,
+		"debug": config_debug,
 		"private-key": config_private_key
 		}
 		function = args[2]
@@ -849,39 +924,75 @@ class config_default(config_common):
 class config_debug(config_common):
 	def __init__(self, inputdata):
 		self._commons()  # Build common vars
+		self._cmd_offset = -1
 		############
 		self.function = "debug"
-		self.delineator = self.attrib()
-		self.key = self.attrib()
-		self._input_profile = {3: self._obj_name_chk}
+		self.timestamp = self.attrib()
+		self.tracepath = self.attrib()
+		self.format = self.attrib()
+		self._mod = self.attrib()
+		self._lev = self.attrib()
+		self.modules = {self._mod:self._lev}
+		#############
+		self._input_profile = {
+			3: ["module", "timestamp", "tracepath", "format"],
+			5: "level"}
 		self._attribs = {
-			"key": self.key,
-			"delineator": self.delineator}
+			"timestamp": self.timestamp,
+			"tracepath": self.tracepath,
+			"format": self.format,
+			"module": self._mod,
+			"level": self._lev}
 		############
 		self._sort_input(inputdata)
-		self.keyobj = paramiko.RSAKey.from_private_key(self) 
+		#self.config = self.attrib_dict  # Override default named config
 	def _parse_command(self, inputdata):
-		self.name = inputdata[3]
-		self.delineator = inputdata[4]
-		self.key = self._multilineinput(self.delineator)
-		self._create_attribs()
+		self.name = inputdata[3+self._cmd_offset]
+		self._get_attribs(inputdata[4+self._cmd_offset:], self._attribs)
+		if "module" in self.attrib_dict:
+			self._format_module()
+		self.config = self.attrib_dict
 	def _parse_config(self, inputdata):
 		for name in inputdata:
 			self.name = name
-		self.delineator = inputdata[self.name]["delineator"]
-		self.key = inputdata[self.name]["key"]
-		self._create_attribs()
-	def _create_attribs(self):
-		self.attrib_list = [self.delineator+"\n"+self.key+"\n"+self.delineator]
-		self.attrib_dict = {"delineator": self.delineator, "key": self.key}
-	def _multilineinput(self, ending):
-		result = ""
-		print("Enter each of the key. End the input with '%s' on a line by itself" % ending)
-		for line in iter(raw_input, ending):
-			result += line+"\n"
-		return result[0:len(result)-1]
-	def readlines(self):  # Used by Paramiko to read out key like a file
-		return self.key.split("\n")
+		self._get_attribs(inputdata[self.name], self._attribs)
+		#self.attrib_dict["modules"] = inputdata[self.name]["modules"]
+		self.modules = inputdata[self.name]["modules"]
+		self.config = self.attrib_dict
+		self.config.update({"modules": self.modules})
+	def _fill_in(self):
+		self.set_cmd_list = [
+			["conman", "set", self.function, "timestamp", '"'+str(self.timestamp)+'"'],
+			["conman", "set", self.function, "format", '"'+str(self.format)+'"'],
+			["conman", "set", self.function, "tracepath", str(self.tracepath)],
+		]
+		for module in self.modules:
+			temp = ["conman", "set", self.function, "module", str(module), "level", str(self.modules[module])]
+			self.set_cmd_list.append(temp)
+		self.set_cmd = ""
+		for cmd in self.set_cmd_list:
+			self.set_cmd += " ".join(cmd)+"\n"
+		self.set_cmd = self.set_cmd[:len(self.set_cmd)-1]  # Rm last \n
+	def _format_module(self):
+		self.attrib_dict.update({"modules": config.running["debugs"]["modules"]})
+		newmod = self.attrib_dict["module"]
+		if "level" in self.attrib_dict:
+			level = self.attrib_dict["level"]
+			del self.attrib_dict["level"]
+		else:
+			level = "1"
+		self.attrib_dict["modules"].update({newmod:level})
+		del self.attrib_dict["module"]
+
+#a = {'debugs': {'timestamp': 'year-month-dayThour-minute-second', 'tracepath': 'caller', 'modules': {'operation': '1', 'operationsw': '3'}, 'format': 'timestamp (linenumber) [tracepath]: data'}}
+#a = ["conman", "set", "debug", "timestamp", "year-month-dayThour-minute-seconds"]
+#a = ["conman", "set", "debug", "module", "testmodule", "level", "1"]
+#d = config_debug(a)
+#d.timestamp
+#d.tracepath
+#d.format
+#d.config
+#d.modules
 
 
 class config_private_key(config_common):
@@ -1119,7 +1230,6 @@ class config_script(config_common):
 		#	between steps, listing step offspring (config and items), and
 		#	nullifying offspring steps when a parent fails
 		def __init__(self, stepdict, globalinput):
-			debug("something")
 			self.globalinput = globalinput
 			self._list = self._order_steps(stepdict)
 			self.tree = self._build_tree(self._list)
@@ -1173,7 +1283,6 @@ class config_script(config_common):
 				step.input = self.globalinput
 		class step_class:
 			def __init__(self, args):
-				debug(args)
 				self.origstr = args["string"]
 				self.instructions = args["instructions"]
 				self.config = args["config"]
@@ -1469,18 +1578,22 @@ class config_script(config_common):
 
 class debugging:
 	def __init__(self):
-		mod_exclude_list = [
+		self.mod_exclude_list = [
 							'__builtins__', '__doc__', '__file__', '__name__', 
 							'__package__', '_new_connect_params_dict', 
 							'cat_list', 'config', 'inspect', 
 							'installer', 'interpreter', 'json', 'netmiko', 
-							'os', 'paramiko', 're', 'sys', 'version']
+							'os', 'paramiko', 're', 'sys', 'version', "debugging", "debug"]
+		self.config = config_debug({"debugs": config.running["debugs"]})
+	def __call__(self, data, level=1):
+		insp = self.inspection()
+		print(self._build_outpt(insp, data))	
 	class inspection:
 		def __init__(self):
 			self.stack = self._clean_stack()
-			self.pathlist = self._build_path()
-			self.path = ".".join(self.pathlist)
+			self.pathlist = self._build_pathlist()
 			self.last = self.pathlist[len(self.pathlist)-1]
+			self.path = self._build_path()
 		def _clean_stack(self):
 			stack = inspect.stack()
 			self.callingline = stack[3][2]
@@ -1491,7 +1604,7 @@ class debugging:
 					break
 				start += 1
 			return stack[start+1:len(stack)-3]
-		def _build_path(self):
+		def _build_pathlist(self):
 			pathlist = []
 			replaceme = ["__init__"]
 			for frame in self.stack:
@@ -1501,17 +1614,38 @@ class debugging:
 						).replace("__main__.", "")
 				pathlist.append(name)
 			return pathlist
-	def _get_mod_list(self):
+		def _build_path(self):
+			if str(debug.config.tracepath) == "full":
+				return ".".join(self.pathlist)
+			elif str(debug.config.tracepath) == "caller":
+				return self.last
+	def get_mod_list(self):
 		result = []
 		for mod in globals():
-			if mod not in mod_exclude_list:
+			if mod not in self.mod_exclude_list:
 				result.append(mod)
 		return result
 	def _tmstmp(self):
-		return time.strftime("%Y-%m-%dT%H:%M:%SZ")
-	def debug(self, data, level=1):
-		insp = self.inspection()
-		print("%s (%s) [%s]: %s" % (self._tmstmp(), insp.callingline, insp.last, data))		
+		mappings = {
+			"year": "%Y",
+			"month": "%m",
+			"day": "%d",
+			"hour": "%H",
+			"minute": "%M",
+			"second": "%S",
+		}
+		tformat = str(self.config.timestamp)
+		for fmt in mappings:
+			if fmt in tformat:
+				tformat = tformat.replace(fmt, mappings[fmt])
+		return time.strftime(tformat)
+	def _build_outpt(self, insp, data):
+		result = str(self.config.format)
+		result = result.replace("timestamp", self._tmstmp())
+		result = result.replace("linenumber", str(insp.callingline))
+		result = result.replace("tracepath", insp.path)
+		result = result.replace("data", data)
+		return result
 
 
 class search_class:
@@ -1627,12 +1761,11 @@ def cat_list(listname):
 
 ##### Main CLI interpreter and helper function. Entry point for the app.  #####
 def interpreter():
-	dinst = debugging()
-	global debug
-	debug = dinst.debug
 	arguments = cat_list(sys.argv[1:])
 	global config
 	config = config_management()
+	global debug
+	debug = debugging()
 	operations = operations_class()
 	if arguments == "next":
 		print("""
@@ -1690,6 +1823,7 @@ def interpreter():
 		config.show(sys.argv)
 	##### SET #####
 	elif arguments == "set":
+		console(" - set debug (module|timestamp|tracepath|format) [options]     |  Set the debugging output options")
 		console(" - set private-key <name> <delineator_char>                    |  Create/modify a RSA private-key to use for SSH authentication")
 		console(" - set credential <name> username <name> [options]             |  Create/modify a credential set to use to log into devices")
 		console(" - set device <name> host <ip/hostname> [options]              |  Create/modify a target device for connections")
@@ -1697,6 +1831,8 @@ def interpreter():
 		console(" - set script <name> step <step-id> <function> [options]       |  Create/modify a script to run against devices")
 		console(" - set default credential <cred-obj-name>                      |  Set the default credential to use")
 		console(" - set default device-type <device-type>                       |  Set the default device type to use on configured devices")
+	elif (arguments[:9] == "set debug" and len(sys.argv) < 5):
+		console(" - set debug (module|timestamp|tracepath|format) [options]     |  Set the debugging output options")
 	elif (arguments[:15] == "set private-key" and len(sys.argv) < 5):
 		console(" - set private-key <name> <delineator_char>                    |  Create/modify a RSA private-key to use for SSH authentication")
 	elif (arguments[:14] == "set credential" and len(sys.argv) < 8) or arguments == "set credential":
@@ -1756,6 +1892,7 @@ def interpreter():
 		console("----------------------------------------------------------------------------------------------------------------------------------------------")
 		console(" - show (config|run) [raw]                                     |  Show the current conman configuration")
 		console("----------------------------------------------------------------------------------------------------------------------------------------------")
+		console(" - set debug (module|timestamp|tracepath|format) [options]     |  Set the debugging output options")
 		console(" - set private-key <name> <delineator_char>                    |  Create/modify a RSA private-key to use for SSH authentication")
 		console(" - set credential <name> username <name> [options]             |  Create/modify a credential set to use to log into devices")
 		console(" - set device <name> host <ip/hostname> [options]              |  Create/modify a target device for connections")
