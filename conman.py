@@ -9,7 +9,9 @@
 import os
 import re
 import sys
+import time
 import json
+import inspect
 import netmiko
 import paramiko
 
@@ -844,6 +846,44 @@ class config_default(config_common):
 #c = config_default(a)
 
 
+class config_debug(config_common):
+	def __init__(self, inputdata):
+		self._commons()  # Build common vars
+		############
+		self.function = "debug"
+		self.delineator = self.attrib()
+		self.key = self.attrib()
+		self._input_profile = {3: self._obj_name_chk}
+		self._attribs = {
+			"key": self.key,
+			"delineator": self.delineator}
+		############
+		self._sort_input(inputdata)
+		self.keyobj = paramiko.RSAKey.from_private_key(self) 
+	def _parse_command(self, inputdata):
+		self.name = inputdata[3]
+		self.delineator = inputdata[4]
+		self.key = self._multilineinput(self.delineator)
+		self._create_attribs()
+	def _parse_config(self, inputdata):
+		for name in inputdata:
+			self.name = name
+		self.delineator = inputdata[self.name]["delineator"]
+		self.key = inputdata[self.name]["key"]
+		self._create_attribs()
+	def _create_attribs(self):
+		self.attrib_list = [self.delineator+"\n"+self.key+"\n"+self.delineator]
+		self.attrib_dict = {"delineator": self.delineator, "key": self.key}
+	def _multilineinput(self, ending):
+		result = ""
+		print("Enter each of the key. End the input with '%s' on a line by itself" % ending)
+		for line in iter(raw_input, ending):
+			result += line+"\n"
+		return result[0:len(result)-1]
+	def readlines(self):  # Used by Paramiko to read out key like a file
+		return self.key.split("\n")
+
+
 class config_private_key(config_common):
 	def __init__(self, inputdata):
 		self._commons()  # Build common vars
@@ -1079,6 +1119,7 @@ class config_script(config_common):
 		#	between steps, listing step offspring (config and items), and
 		#	nullifying offspring steps when a parent fails
 		def __init__(self, stepdict, globalinput):
+			debug("something")
 			self.globalinput = globalinput
 			self._list = self._order_steps(stepdict)
 			self.tree = self._build_tree(self._list)
@@ -1089,10 +1130,10 @@ class config_script(config_common):
 			self._iterindex = 0
 			self.next = self.__next__  # Python2 Compatibility
 		def __iter__(self):
+			self._iterindex = 0
 			return self
 		def __next__(self): # Python 3: def __next__(self)
 			if self._iterindex == len(self._list):
-				self._iterindex = 0
 				raise StopIteration
 			else:
 				self._iterindex += 1
@@ -1109,11 +1150,16 @@ class config_script(config_common):
 			for each in self.get_offspring(step):
 				result.update(each.config)
 			return result
-		def nullify(self, step=None):  # Nullify current and child steps
-			if not step:
-				step = self._list[self._iterindex-1]
-			for each in self._get_stepset_list(step):
+		def nullify(self, currentstep=None):  # Nullify current and child steps
+			if not currentstep:
+				currentstep = self._list[self._iterindex-1]
+			for each in self._get_stepset_list(currentstep):
 				each.valid = False
+		def skipify(self, currentstep=None):  # Nullify current and child steps
+			if not currentstep:
+				currentstep = self._list[self._iterindex-1]
+			for each in self._get_stepset_list(currentstep):
+				each.skip = True
 		def store_output(self, inputdata, step=None):  # Set input on child (only) steps
 			if not step:
 				step = self._list[self._iterindex-1]
@@ -1127,6 +1173,7 @@ class config_script(config_common):
 				step.input = self.globalinput
 		class step_class:
 			def __init__(self, args):
+				debug(args)
 				self.origstr = args["string"]
 				self.instructions = args["instructions"]
 				self.config = args["config"]
@@ -1135,6 +1182,7 @@ class config_script(config_common):
 				self.depth = len(self.intlist)
 				self.input = None
 				self.valid = True
+				self.skip = False
 				self.cmd_list = self._subcommand()
 			def level(self, level):
 				try:
@@ -1370,7 +1418,7 @@ class config_script(config_common):
 		for match in search.matchlist:
 			newscript = config_script({step.str: {"steps": childinst}}, self.sock, globalinput=match)
 			newscript.run()
-		self.steps.nullify() # Nullify offspring to prevent linear run
+		self.steps.skipify() # Skip offspring to prevent linear run
 	def _run_script(self, step):
 		script = step.instructions["run-script"]
 		if script in config.running["scripts"]:
@@ -1391,31 +1439,79 @@ class config_script(config_common):
 			"run-script": self._run_script
 		}
 		for step in self.steps:  # Iter through step objects in order
-			if not self.terminate:
-				#####
-				#ui.write_log("Executing step %s" % step.origstr)
-				inputdata = step.input  # Pull output from last loop
-				function = list(step.instructions)[0]  # Set function name
-				#ui.write_log("Instructions: %s" % step.instructions)
-				#####
-				if not step.valid:  # If it has been marked invalid
-					pass
-					#ui.write_log("Step %s has been invalidated. Skipping" 
-					#	% step.origstr)
+			if not step.skip:
+				if not self.terminate:
+					#####
+					ui.write_log("Executing step %s" % step.origstr)
+					inputdata = step.input  # Pull output from last loop
+					function = list(step.instructions)[0]  # Set function name
+					ui.write_log("Instructions: %s" % step.instructions)
+					#####
+					if not step.valid:  # If it has been marked invalid
+						pass
+						ui.write_log("Step %s has been invalidated. Skipping" 
+							% step.origstr)
+					else:
+						ui.write_log("Step %s is valid. Continuing" % step.origstr)
+						funcmap[function](step)  # Execute step with method
+					ui.write_log("Step %s complete" % step.origstr)
+					ui.write_log("\n\n\n")
 				else:
-					#ui.write_log("Step %s is valid. Continuing" % step.origstr)
-					funcmap[function](step)
-				#ui.write_log("Step %s complete" % step.origstr)
-				#ui.write_log("\n\n\n")
-			else:
-				#ui.write_log("Terminate flag set. Terminating script")
-				return self.lastoutput
+					ui.write_log("Terminate flag set. Terminating script")
+					return self.lastoutput
 		return self.lastoutput  # Return the socket after complete
 
 #c = {'SHORT': {u'steps': {u'1': {u'send': u'show ver'}, u'1.1': {u'dump-input': None}}}}
 #
 #a = config_script(b, None)
 #b = ['conman', 'set', 'script', 'SHORT', 'step', '1', u'send', u'"show ver"']
+
+
+class debugging:
+	def __init__(self):
+		mod_exclude_list = [
+							'__builtins__', '__doc__', '__file__', '__name__', 
+							'__package__', '_new_connect_params_dict', 
+							'cat_list', 'config', 'inspect', 
+							'installer', 'interpreter', 'json', 'netmiko', 
+							'os', 'paramiko', 're', 'sys', 'version']
+	class inspection:
+		def __init__(self):
+			self.stack = self._clean_stack()
+			self.pathlist = self._build_path()
+			self.path = ".".join(self.pathlist)
+			self.last = self.pathlist[len(self.pathlist)-1]
+		def _clean_stack(self):
+			stack = inspect.stack()
+			self.callingline = stack[3][2]
+			stack.reverse()
+			start = 0
+			for frame in stack:
+				if frame[3] == "interpreter":
+					break
+				start += 1
+			return stack[start+1:len(stack)-3]
+		def _build_path(self):
+			pathlist = []
+			replaceme = ["__init__"]
+			for frame in self.stack:
+				name = frame[3]
+				if name in replaceme:
+					name = str(frame[0].f_locals["self"].__class__
+						).replace("__main__.", "")
+				pathlist.append(name)
+			return pathlist
+	def _get_mod_list(self):
+		result = []
+		for mod in globals():
+			if mod not in mod_exclude_list:
+				result.append(mod)
+		return result
+	def _tmstmp(self):
+		return time.strftime("%Y-%m-%dT%H:%M:%SZ")
+	def debug(self, data, level=1):
+		insp = self.inspection()
+		print("%s (%s) [%s]: %s" % (self._tmstmp(), insp.callingline, insp.last, data))		
 
 
 class search_class:
@@ -1531,6 +1627,9 @@ def cat_list(listname):
 
 ##### Main CLI interpreter and helper function. Entry point for the app.  #####
 def interpreter():
+	dinst = debugging()
+	global debug
+	debug = dinst.debug
 	arguments = cat_list(sys.argv[1:])
 	global config
 	config = config_management()
@@ -1543,7 +1642,6 @@ def interpreter():
 		- Clean up text output handling (remove all prints)
 	CLEANUP/FIXES
 		- Offload completion to native python
-		- config_script should be able to skip steps (after a loop) all together (not nullify)
 	TESTING
 		- Create working recursive script
 	NEW FEATURES
@@ -1551,6 +1649,9 @@ def interpreter():
 		- More script functions: elif-match, else, set-variable, enter-config, exit-config
 		- Build: credential-groups
 		- Apply scripts as login scripts
+		- Add "connect" to get an interactive shell
+			- Use native SSH client? Cannot do scripted logins?
+			- Cannot find way to do interactive shell
 		""")
 	##### HIDDEN #####
 	elif arguments[:6] == "hidden" and len(sys.argv) > 3:
@@ -1680,6 +1781,7 @@ if __name__ == "__main__":
 	interpreter()
 	#s = config_script(config["scripts"]["MY_SCRIPT"], "")
 	#s.run()
+
 
 
 
