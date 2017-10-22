@@ -22,7 +22,6 @@ version = "v0.0.1"
 
 class test_sock:
 	def __init__(self, delineator):
-		debug("Starting")
 		self.connected = True
 		self.delineator = delineator
 	def send(self, data):
@@ -568,10 +567,10 @@ class config_management:
 				return None
 		configtext = "########################\n!\n"
 		####################
-		debugtext = ""
+		debgtext = ""
 		current = config_debug({"debugs": self.running["debugs"]})
-		debugtext += current.set_cmd+"\n!\n"
-		debugtext += "########################\n!\n"
+		debgtext += current.set_cmd+"\n!\n"
+		debgtext += "########################\n!\n"
 		####################
 		####################
 		privatekeytext = ""
@@ -612,7 +611,7 @@ class config_management:
 		defaulttext += current.set_cmd+"\n"
 		defaulttext += "!\n########################\n"
 		####################
-		configtext += debugtext
+		configtext += debgtext
 		configtext += privatekeytext
 		configtext += credentialtext
 		configtext += devicetext
@@ -625,9 +624,9 @@ class config_management:
 		if item in simple:
 			self.hidden_show_simple(item)
 		elif item == "possible-debugs":
-			self.hidden_show_possible_debugs(args)
+			self.hidden_show_possible_debgs(args)
 		elif item == "current-debugs":
-			self.hidden_show_current_debugs(args)
+			self.hidden_show_current_debgs(args)
 		elif item == "script-steps":
 			self.hidden_show_script_steps(args)
 		elif item == "supported-devices":
@@ -639,10 +638,11 @@ class config_management:
 		if item in list(self.running):
 			for each in self.running[item]:
 				print(each)
-	def hidden_show_possible_debugs(self, args):
+	def hidden_show_possible_debgs(self, args):
+		print("all_modules")
 		for mod in debug.get_mod_list():
 			print(mod)
-	def hidden_show_current_debugs(self, args):
+	def hidden_show_current_debgs(self, args):
 		for mod in self.running["debugs"]["modules"]:
 			print(mod)
 	def hidden_show_script_steps(self, args):
@@ -650,13 +650,13 @@ class config_management:
 		if "scripts" in list(self.running):
 			if script in list(self.running["scripts"]):
 				for step in self.running["scripts"][script]["steps"]:
-					print step
+					print(step)
 	def hidden_show_device_group_members(self, args):
 		group = args[4]
 		if "device-groups" in list(self.running):
 			if group in list(self.running["device-groups"]):
 				for member in self.running["device-groups"][group]["members"]:
-					print member
+					print(member)
 	def clear(self, args):
 		function = args[2]
 		simple = ["device", "credential", "private-key"]
@@ -667,7 +667,7 @@ class config_management:
 		elif function == "device-group":
 			self.clear_device_group(args)
 		elif function == "debug":
-			self.clear_debug(args)
+			self.clear_debg(args)
 		else:
 			print("Unknown function!")
 	def clear_simple(self, args):
@@ -681,7 +681,7 @@ class config_management:
 				print("%s not in %s!" % (name, function))
 		else:
 			print("%s not in config!" % function)
-	def clear_debug(self, args):
+	def clear_debg(self, args):
 		module = args[4]
 		if len(args) < 5:
 			print("Incomplete command!")
@@ -983,16 +983,6 @@ class config_debug(config_common):
 			level = "1"
 		self.attrib_dict["modules"].update({newmod:level})
 		del self.attrib_dict["module"]
-
-#a = {'debugs': {'timestamp': 'year-month-dayThour-minute-second', 'tracepath': 'caller', 'modules': {'operation': '1', 'operationsw': '3'}, 'format': 'timestamp (linenumber) [tracepath]: data'}}
-#a = ["conman", "set", "debug", "timestamp", "year-month-dayThour-minute-seconds"]
-#a = ["conman", "set", "debug", "module", "testmodule", "level", "1"]
-#d = config_debug(a)
-#d.timestamp
-#d.tracepath
-#d.format
-#d.config
-#d.modules
 
 
 class config_private_key(config_common):
@@ -1579,20 +1569,23 @@ class config_script(config_common):
 class debugging:
 	def __init__(self):
 		self.mod_exclude_list = [
-							'__builtins__', '__doc__', '__file__', '__name__', 
-							'__package__', '_new_connect_params_dict', 
-							'cat_list', 'config', 'inspect', 
-							'installer', 'interpreter', 'json', 'netmiko', 
-							'os', 'paramiko', 're', 'sys', 'version', "debugging", "debug"]
+			'__builtins__', '__doc__', '__file__', '__name__', 
+			'__package__', '_new_connect_params_dict', 
+			'cat_list', 'config', 'inspect', 
+			'installer', 'json', 'netmiko', 
+			'os', 'paramiko', 're', 'sys', 'version', "debugging", "debug"]
 		self.config = config_debug({"debugs": config.running["debugs"]})
+		self.enabled = True
 	def __call__(self, data, level=1):
-		insp = self.inspection()
-		print(self._build_outpt(insp, data))	
+		if self.enabled:
+			insp = self.inspection()
+			if self._to_output(insp, level):
+				print(self._build_outpt(insp, data, level))	
 	class inspection:
 		def __init__(self):
 			self.stack = self._clean_stack()
-			self.pathlist = self._build_pathlist()
-			self.last = self.pathlist[len(self.pathlist)-1]
+			self.caller = self._build_caller()
+			self.pathstring = self._build_pathstring()
 			self.path = self._build_path()
 		def _clean_stack(self):
 			stack = inspect.stack()
@@ -1603,28 +1596,61 @@ class debugging:
 				if frame[3] == "interpreter":
 					break
 				start += 1
-			return stack[start+1:len(stack)-3]
-		def _build_pathlist(self):
-			pathlist = []
-			replaceme = ["__init__"]
+			return stack[start:len(stack)-3]
+		def _get_class(self, frame):
+			try:
+				name = frame[0].f_locals["self"].__class__.__name__
+				return name
+			except:
+				return None
+		def _build_pathstring(self):
+			result = ""
+			current_class = None
+			lastline = ""
 			for frame in self.stack:
-				name = frame[3]
-				if name in replaceme:
-					name = str(frame[0].f_locals["self"].__class__
-						).replace("__main__.", "")
-				pathlist.append(name)
-			return pathlist
+				parent = self._get_class(frame)
+				method = frame[3]
+				interclass = "--%s-->" % lastline
+				intraclass = "-%s->" % lastline
+				if parent:
+					if parent != current_class:
+						current_class = parent
+						result += interclass+parent+"."+method
+					else:
+						result += intraclass+method
+				else:
+					result += interclass+method
+				lastline = frame[2]
+			return result[5:]
+		def _build_caller(self):
+			result = ""
+			frame = self.stack[len(self.stack)-1]
+			parent = self._get_class(frame)
+			if parent:
+				self.parent = parent
+				result += parent+"."
+			else:
+				self.parent = frame[3]
+			result += frame[3]
+			return result
 		def _build_path(self):
 			if str(debug.config.tracepath) == "full":
-				return ".".join(self.pathlist)
+				return self.pathstring
 			elif str(debug.config.tracepath) == "caller":
-				return self.last
+				return self.caller
 	def get_mod_list(self):
 		result = []
 		for mod in globals():
 			if mod not in self.mod_exclude_list:
 				result.append(mod)
 		return result
+	def _to_output(self, insp, level):
+		if insp.parent in self.config.modules:
+			if level <= int(self.config.modules[insp.parent]):
+				return True
+		elif "all_modules" in self.config.modules:
+			if level <= int(self.config.modules["all_modules"]):
+				return True
 	def _tmstmp(self):
 		mappings = {
 			"year": "%Y",
@@ -1639,8 +1665,9 @@ class debugging:
 			if fmt in tformat:
 				tformat = tformat.replace(fmt, mappings[fmt])
 		return time.strftime(tformat)
-	def _build_outpt(self, insp, data):
+	def _build_outpt(self, insp, data, level):
 		result = str(self.config.format)
+		result = result.replace("level", str(level))
 		result = result.replace("timestamp", self._tmstmp())
 		result = result.replace("linenumber", str(insp.callingline))
 		result = result.replace("tracepath", insp.path)
@@ -1688,11 +1715,14 @@ class operations_class:  # Container class
 			delineator = args[4]
 			self.test_script(scriptname, delineator)
 	def run(self, args):
+		debug("Starting a script run")
 		if args[2] == "script":
 			scriptname = args[3]
 			devicename = args[5]
+			debug("Running script (%s) against (%s)" % (scriptname, devicename))
 			self.run_script(scriptname, devicename)
 	def test_script(self, scriptname, delineator):
+		debug("Starting a script test")
 		if scriptname not in list(config.running["scripts"]):
 			print("Script (%s) not in configuration" % scriptname)
 			return None
@@ -1700,30 +1730,42 @@ class operations_class:  # Container class
 		script = config_script({scriptname: config.running["scripts"][scriptname]}, sock)
 		script.run()
 	def _script_exists(self, scriptname):
+		debug("Checking if script (%s) exists" % scriptname)
 		if scriptname not in list(config.running["scripts"]):
 			print("Script (%s) not in configuration" % scriptname)
 			return False
 		else:
+			debug("Script (%s) does exist" % scriptname)
 			return True
 	def _get_device(self, devicename):
+		debug("Checking if device (%s) exists" % devicename)
 		if devicename in list(config.running["devices"]):
+			debug("Device (%s) does exists as a device" % devicename)
 			return config_device({devicename: config.running["devices"][devicename]})
 		elif devicename in list(config.running["device-groups"]):
+			debug("Device (%s) does exists as a device-group" % devicename)
 			return config_device_group({devicename: config.running["device-groups"][devicename]})
 		else:
 			print("Device (%s) not in configuration" % devicename)
 			return None
 	def run_script(self, scriptname, devicename):
+		debug("Beginning script pre-execution checks")
 		if self._script_exists(scriptname):
+			debug("Trying to instantiate device (%s) config" % devicename)
 			devices = self._get_device(devicename)
 			if devices:
+				debug("Device (%s) config instantiation successful" % devicename)
 				for device in devices:
 					if device.function == "device-group":
+						debug("Device (%s) is a device-group. Recursing to get actual device" % devicename)
 						self.run_script(scriptname, device.name)
 					else:
+						debug("Device (%s) is not a device-group. Attempting to connect..." % devicename)
 						sock = device.make_sock()
+						debug("Connection to device (%s) successful! Instantiating the script (%s)" % (devicename, scriptname))
 						script = config_script({scriptname:
 							config.running["scripts"][scriptname]}, sock)
+						debug("Script (%s) instantiation with device (%s) successful. Kicking off script execution" % (scriptname, devicename))
 						script.run()
 
 
@@ -1766,6 +1808,9 @@ def interpreter():
 	config = config_management()
 	global debug
 	debug = debugging()
+	if arguments[:6] == "hidden":
+		debug.enabled = False
+	debug("config and debugging instantiated", 3)
 	operations = operations_class()
 	if arguments == "next":
 		print("""
