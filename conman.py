@@ -1483,52 +1483,71 @@ class config_script(config_common):
 			else:
 				print("Unknown action (%s)!" % action)
 	######## Script execution methods ########
-	def __output(self, outputdata):
+	def __output(self, outputdata, step):
+		debug("(%s): Passing output to children steps" % step.str)
 		self.steps.store_output(outputdata)  # Write to child steps
 		self.lastoutput = outputdata  # Write to last output store
 	def _send(self, step):
 		command = step.instructions["send"]
+		debug("(%s): Sending (%s)" % (step.str, command))
 		output = self.sock.send_command_timing(command)
-		self.__output(output)
+		self.__output(output, step)
 	def _terminate(self, step):
+		debug("(%s): Setting terminate flag and killing socket" % step.str)
 		self.sock.disconnect()  # Kill socket
-		self.__output(step.input)  # Pass on inputdata
+		self.__output(step.input, step)  # Pass on inputdata
 		self.terminate = True  # Set termination flag
 	def _dump_input(self, step):
 		# No required args here
-		ui.write_log(step.input)
-		self.__output(step.input)  # Pass to children
+		debug("(%s): Dumping input" % step.str)
+		console("#"*25 + " DUMPING INPUT " + "#"*25)
+		console(step.input)
+		console("#"*65)
+		self.__output(step.input, step)  # Pass to children
 	def _if_match(self, step):
+		debug("(%s): Checking if-match" % step.str)
 		regex = step.instructions["if-match"]["regex"]
+		debug("(%s): Regex set to (%s)" % (step.str, regex))
 		criterion = step.instructions["if-match"]["criterion"]
+		debug("(%s): Criterion set to (%s)" % (step.str, criterion))
 		search = search_class(regex, step.input)
-		ui.write_log("Regex match returned: %s" % search.matchlist)
+		debug("(%s): Regex match returned: %s" % (step.str, search.matchlist))
 		if (criterion == "partial" and search.partial
 			) or (criterion == "complete" and search.complete):
-			ui.write_log("Match confirmed")
-			self.__output(step.input)  # Pass to children
+			debug("(%s): Match confirmed" % step.str)
+			self.__output(step.input, step)  # Pass to children
 		else:
-			ui.write_log("No pattern matched")
+			debug("(%s): No pattern matched. Nullifying offspring" % step.str)
 			self.steps.nullify()  # Invalidate all offspring
 	def _for_match(self, step):
+		debug("(%s): Checking for-match" % step.str)
 		regex = step.instructions["for-match"]["regex"]
+		debug("(%s): Regex set to (%s)" % (step.str, regex))
 		search = search_class(regex, step.input)
+		debug("(%s): Regex match returned: %s" % (step.str, search.matchlist))
 		childinst = self.steps.get_offspring_config()
+		debug("(%s): Pulled offspring step instructions: %s" % (step.str, childinst))
+		debug("(%s): Beginning a loop on each match result" % step.str)
 		for match in search.matchlist:
+			debug("(%s): Looping on match (%s)" % (step.str, match))
 			newscript = config_script({step.str: {"steps": childinst}}, self.sock, globalinput=match)
+			debug("(%s): Spawn script instantiated. Running..." % step.str)
 			newscript.run()
+		debug("(%s): For-match loop complete. Setting offspring to skip" % step.str)
 		self.steps.skipify() # Skip offspring to prevent linear run
 	def _run_script(self, step):
 		script = step.instructions["run-script"]
 		if script in config.running["scripts"]:
 			newscript = config_script({script: config.running["scripts"][script]}, self.sock, globalinput=step.input)
 			output = newscript.run()
-			self.__output(output)
+			self.__output(output, step)
 		else:
-			ui.write_log("Script %s not found. Skipping" % script)
+			debug("Script %s not found. Skipping" % script)
 			self.steps.nullify()
 	def run(self):
+		debug("Beginning script run")
 		lastoutput = None
+		debug("Script global input (lastoutput) is set to (%s)" % lastoutput)
 		funcmap = {  # Map config function names to actual methods
 			"send": self._send,
 			"dump-input": self._dump_input,
@@ -1541,22 +1560,21 @@ class config_script(config_common):
 			if not step.skip:
 				if not self.terminate:
 					#####
-					ui.write_log("Executing step %s" % step.origstr)
+					debug("(%s): Beginning step execution" % step.str)
 					inputdata = step.input  # Pull output from last loop
 					function = list(step.instructions)[0]  # Set function name
-					ui.write_log("Instructions: %s" % step.instructions)
+					debug("(%s): Step instructions: %s" % (step.str, step.instructions))
 					#####
 					if not step.valid:  # If it has been marked invalid
 						pass
-						ui.write_log("Step %s has been invalidated. Skipping" 
-							% step.origstr)
+						debug("(%s): Step has been invalidated. Skipping" 
+							% step.str)
 					else:
-						ui.write_log("Step %s is valid. Continuing" % step.origstr)
+						debug("(%s): Step is valid. Continuing" % step.str)
 						funcmap[function](step)  # Execute step with method
-					ui.write_log("Step %s complete" % step.origstr)
-					ui.write_log("\n\n\n")
+					debug("(%s): Step complete \n\n\n" % step.str)
 				else:
-					ui.write_log("Terminate flag set. Terminating script")
+					debug("(%s): Terminate flag set. Terminating script" % step.str)
 					return self.lastoutput
 		return self.lastoutput  # Return the socket after complete
 
@@ -1815,8 +1833,8 @@ def interpreter():
 	if arguments == "next":
 		print("""
 	LOGGING/DEBUGGING:
-		- Build in debugging/logging
-		- Add debug to script run. Quiet if not
+		- Add debug probes. Set proper levels
+		- Build in logging
 		- Clean up text output handling (remove all prints)
 	CLEANUP/FIXES
 		- Offload completion to native python
