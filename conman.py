@@ -61,7 +61,52 @@ class cli:
 ##### Installer class: A simple holder class which contains all of the    #####
 #####   installation scripts used to install/upgrade the ZTP server       #####
 class installer:
-	defaultconfig = '''{}'''
+	defaultconfig = '''{
+    "credentials": {
+        "ADMIN": {
+            "password": "admin1234", 
+            "username": "admin"
+        }
+    }, 
+    "debugs": {
+        "format": "timestamp (linenumber) [tracepath] {level}: data", 
+        "modules": {
+            "config_script": "1", 
+            "operations_class": "1"
+        }, 
+        "timestamp": "year-month-dayThour-minute-secondZ", 
+        "tracepath": "caller"
+    }, 
+    "defaults": {
+        "credential": "ADMIN", 
+        "device-type": "cisco_ios"
+    }, 
+    "device-groups": {}, 
+    "devices": {}, 
+    "private-keys": {}, 
+    "scripts": {
+        "CISCO": {
+            "steps": {
+                "1": {
+                    "send": "show ver"
+                }, 
+                "1.1": {
+                    "dump-input": null
+                }
+            }
+        }, 
+        "LINUX": {
+            "steps": {
+                "1": {
+                    "send": "ps"
+                }, 
+                "1.1": {
+                    "dump-input": null
+                }
+            }
+        }
+    }
+}'''
 	def minor_update_script(self):
 		pass
 	def copy_binary(self):
@@ -521,7 +566,10 @@ class config_management:
 		self._publish()
 		self._get_supported_devices()
 	def _get_supported_devices(self):
-		from netmiko.ssh_dispatcher import CLASS_MAPPER_BASE as supported_devices
+		try:
+			from netmiko.ssh_dispatcher import CLASS_MAPPER_BASE as supported_devices
+		except:
+			return None
 		self.supported_devices = list(supported_devices)
 		self.supported_devices.sort()
 	def _get_config_file(self):
@@ -1599,7 +1647,16 @@ class debugging:
 			'cat_list', 'config', 'inspect', 
 			'installer', 'json', 'netmiko', 
 			'os', 'paramiko', 're', 'sys', 'version', "debugging", "debug"]
-		self.config = config_debug({"debugs": config.running["debugs"]})
+		self.defaultconfig = {
+			"debugs": {
+				"format": "timestamp (linenumber) [tracepath] {level}: data",
+				"modules": {},
+				"timestamp": "year-month-dayThour-minute-secondZ",
+				"tracepath": "caller"}}
+		if "debugs" in config.running:
+			self.config = config_debug({"debugs": config.running["debugs"]})
+		else:
+			self.config = config_debug(self.defaultconfig)
 		self.enabled = True
 	def __call__(self, data, level=1):
 		if self.enabled:
@@ -1812,7 +1869,10 @@ def _new_connect_params_dict(self):
 	return conn_dict
 
 # Overwrite the netmiko method here
-netmiko.base_connection.BaseConnection._connect_params_dict = _new_connect_params_dict
+try:
+	netmiko.base_connection.BaseConnection._connect_params_dict = _new_connect_params_dict
+except:
+	pass
 
 
 ##### Concatenate a list of words into a space-seperated string           #####
@@ -1840,6 +1900,7 @@ def interpreter():
 	if arguments == "next":
 		print("""
 	LOGGING/DEBUGGING:
+		- Fix up config printing when empty parts
 		- Add debug probes. Set proper levels
 		- Build in logging
 		- Clean up text output handling (remove all prints)
