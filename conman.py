@@ -13,13 +13,14 @@ import time
 import json
 import inspect
 
-import paramiko
+
 
 
 try:
 	import netmiko
+	import paramiko
 except:
-	print("Netmiko import failed. Make sure to run the installer")
+	print("Netmiko/Paramiko import failed. Make sure to run the installer")
 
 
 ##### Inform version here #####
