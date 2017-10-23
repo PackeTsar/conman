@@ -12,8 +12,14 @@ import sys
 import time
 import json
 import inspect
-import netmiko
+
 import paramiko
+
+
+try:
+	import netmiko
+except:
+	print("Netmiko import failed. Make sure to run the installer")
 
 
 ##### Inform version here #####
