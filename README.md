@@ -107,11 +107,61 @@ Below is the CLI guide for the Conman Utility
 
 The main use for Conman is its simple scripting functionality
 
+#### Step Numbers
+Step numbering forms the backbone of the Conman scripting system. Steps are broken into dot-decimal notation (ie: 10.10.1 or 52.64.1110) with no real limit to the value of each sub-step or the quantity of sub-steps (10.20.35.40.99999.1.... and so on).
 
+The information in each step number is used in two primary ways:
+1. The value of each sub-step is used to determine the position of the step between other steps in the script (where the left-most sub-step numbers in the step are the highest order ones)
+2. The dot-decimal function is used to determine parent-child-grandchild... inheritance (step 1.1 is a child of step 1) with the following functionality
+	- The output of a step is distributed to its children (and not to its grandchildren)
+		- Example: If step 100 sends a CLI command, then the output back from the device will be fed into step 100.1 (if it exists)
 
+#### Functions
+Each step will contain a function. Each function accepts an input (which comes from its parent step) and will provide some kind of output which can either be discarded or used in child steps.
 
+Below is a list of currently configurable scripting Functions
 
+##### send
+	- DESCRIPTION: Sends a statically configured string to a remote device
+	- ARGUMENTS: Static string (ie: `show version`) after the function
+	- INPUT: Discarded
+	- OUTPUT: Any text data returned by the device after the command is run
+	- EXAMPLE: `conman set script CISCO step 1 send "show version"`
 
+##### dump-input
+	- DESCRIPTION: Prints its input to the terminal for user viewing
+	- ARGUMENTS: None
+	- INPUT: Printed to screen
+	- OUTPUT: Input data is passed on as output
+	- EXAMPLE: `conman set script CISCO step 1.1 dump-input`
+
+##### terminate
+	- DESCRIPTION: Terminates the device socket and sets the terminate flag to stop rule processing
+	- ARGUMENTS: None
+	- INPUT: Discarded
+	- OUTPUT: None
+	- EXAMPLE: `conman set script CISCO step 2 terminate`
+
+##### if-match
+	- DESCRIPTION: Runs a regular expression (Regex) match against its input, if a match is found, the matched data is passed as output and child steps are allowed to run. If no match is found, child steps are discarded and not run.
+	- ARGUMENTS: Static regular expression string (ie: `^interface.*$`) after the function. Match criterion (`partial` or `complete`) after the regex string.
+	- INPUT: Searched using the regular expression
+	- OUTPUT: The string returned by the regex match
+	- EXAMPLE: `conman set script TEST step 100 if-match "^interface.*$" complete`
+
+##### for-match
+	- DESCRIPTION: Similar to `if-match` except that it processes the child steps in a for-loop against each regex match returned by the search
+	- ARGUMENTS: Static regular expression string (ie: `^interface.*$`) after the function
+	- INPUT: Searched using the regular expression
+	- OUTPUT: The string returned by each of the matches returned by regex
+	- EXAMPLE: `conman set script TEST step 100 for-match "^interface.*$"`
+
+##### run-script
+	- DESCRIPTION: Allows the script to run another script as a slave, passing its input into the slave script to be used by first-order steps
+	- ARGUMENTS: Script name after the function
+	- INPUT: Passed into the slave script to be used by first order steps (ie: step 1 or step 5)
+	- OUTPUT: Final output of the slave script is passed to this steps children as inputs
+	- EXAMPLE: `conman set script TEST step 100 run-script OTHER_SCRIPT`
 
 
 
