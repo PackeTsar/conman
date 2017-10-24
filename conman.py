@@ -126,6 +126,8 @@ class installer:
 		f.close()
 		console("Config File Created at " + configfilepath + configfilename)
 	def install_dependencies(self):
+		os.system("yum install epel-release -y")
+		os.system("yum install python-pip -y")
 		os.system("pip install netmiko")
 	def install_completion(self):
 		##### BASH SCRIPT DATA START #####
