@@ -1268,7 +1268,7 @@ class config_script(config_common):
 		############
 		self.function = "script"
 		self.sock = sock  # Save the socket as a local variable
-		self.globalinput = globalinput
+		self.globalinput = globalinput  # Used when scripts call each other
 		self.lastoutput = None  # Used when scripts call each other
 		self.terminate = False
 		self._sort_input(inputdata)
@@ -1371,6 +1371,7 @@ class config_script(config_common):
 					elif action == "for-match":
 						result.append('"%s"' % inst[action]["regex"])
 				return result
+			######## END OF STEP_CLASS  ########
 		def _bigger(self, a, b, l=0):
 			asub = a.level(l)
 			bsub = b.level(l)
@@ -1481,6 +1482,7 @@ class config_script(config_common):
 					if stepdict[step] != None:
 						self._iter_steps(stepdict[step], result)
 			return result
+		######## END OF STEPS_CLASS  ########
 	######## Script config handling methods ########
 	def _parse_config(self, inputdata):
 		for name in inputdata:
@@ -1918,6 +1920,17 @@ def interpreter():
 		- Add "connect" to get an interactive shell
 			- Use native SSH client? Cannot do scripted logins?
 			- Cannot find way to do interactive shell
+	MAKING STRING PROCESSING ITS OWN ITEM (munge vs script)
+		Pros:
+			more modularity, easier to build and test
+			Can be reused by multiple scripts or multiple times in the same script
+			Can be integrated into more places
+
+		Cons:
+			Harder to understand how it works
+			Confusing how rule numbering will work
+			Could build string processing into scripts and just use run-script function for reuse
+			Could reuse 
 		""")
 	##### HIDDEN #####
 	elif arguments[:6] == "hidden" and len(sys.argv) > 3:
